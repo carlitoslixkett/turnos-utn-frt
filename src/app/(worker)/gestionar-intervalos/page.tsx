@@ -1,0 +1,16 @@
+import { createClient } from "@/lib/supabase/server";
+import { IntervalsClient } from "./intervals-client";
+
+export default async function GestionarIntervalosPage() {
+  const supabase = await createClient();
+
+  const [{ data: intervals }, { data: notes }] = await Promise.all([
+    supabase
+      .from("intervals")
+      .select("*, interval_notes(note_id, notes(id, name))")
+      .order("date_start", { ascending: false }),
+    supabase.from("notes").select("id, name").eq("is_active", true).order("name"),
+  ]);
+
+  return <IntervalsClient initialIntervals={intervals ?? []} notes={notes ?? []} />;
+}
