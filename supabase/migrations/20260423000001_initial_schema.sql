@@ -174,19 +174,19 @@ CREATE INDEX idx_audit_log_actor ON audit_log(actor_id, created_at);
 -- ============================================================
 -- Función: auto-crear profile al registrarse
 -- ============================================================
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-  INSERT INTO profiles (id, full_name, dni, user_type)
+  INSERT INTO public.profiles (id, full_name, dni, user_type)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
     COALESCE(NEW.raw_user_meta_data->>'dni', ''),
-    COALESCE((NEW.raw_user_meta_data->>'user_type')::user_type, 'student')
+    COALESCE((NEW.raw_user_meta_data->>'user_type')::public.user_type, 'student')
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
