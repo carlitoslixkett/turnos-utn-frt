@@ -3,7 +3,8 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { updateIntervalSchema } from "@/lib/validations/intervals";
 import { writeAuditLog } from "@/lib/utils/audit";
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,7 +14,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const { data, error } = await supabase
     .from("intervals")
     .select("*, interval_notes(note_id, notes(id, name))")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
 
   if (error || !data)
@@ -21,7 +22,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   return NextResponse.json({ data });
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const adminClient = await createAdminClient();
 
@@ -51,25 +53,23 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const { data: pendingTurns } = await adminClient
       .from("turns")
       .select("id, student_id, date, notes(name), profiles(full_name, email)")
-      .eq("interval_id", params.id)
+      .eq("interval_id", id)
       .eq("status", "pending");
 
     if (pendingTurns && pendingTurns.length > 0) {
-      // Cancel all pending turns in this interval
       await adminClient
         .from("turns")
         .update({ status: "cancelled" })
-        .eq("interval_id", params.id)
+        .eq("interval_id", id)
         .eq("status", "pending");
 
-      // Log each cancellation
       for (const turn of pendingTurns) {
         await writeAuditLog({
           actorId: user.id,
           action: "turn.cancel_by_interval_deactivation",
           entityType: "turns",
           entityId: turn.id,
-          payload: { interval_id: params.id, reason: "interval_deactivated" },
+          payload: { interval_id: id, reason: "interval_deactivated" },
         });
       }
     }
@@ -81,7 +81,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const { data: interval, error } = await adminClient
     .from("intervals")
     .update(intervalUpdate)
-    .eq("id", params.id)
+    .eq("id", id)
     .select("*")
     .single();
 
@@ -91,7 +91,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     actorId: user.id,
     action: "interval.update",
     entityType: "intervals",
-    entityId: params.id,
+    entityId: id,
     payload: parsed.data as Record<string, unknown>,
   });
 

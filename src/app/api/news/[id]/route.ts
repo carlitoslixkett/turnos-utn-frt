@@ -3,7 +3,8 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { updateNewsSchema } from "@/lib/validations/news";
 import { writeAuditLog } from "@/lib/utils/audit";
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,7 +14,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const { data, error } = await supabase
     .from("news")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .is("deleted_at", null)
     .single();
 
@@ -21,7 +22,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   return NextResponse.json({ data });
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const adminClient = await createAdminClient();
 
@@ -49,7 +51,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const { data: news, error } = await adminClient
     .from("news")
     .update(parsed.data)
-    .eq("id", params.id)
+    .eq("id", id)
     .is("deleted_at", null)
     .select("*")
     .single();
@@ -60,14 +62,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     actorId: user.id,
     action: "news.update",
     entityType: "news",
-    entityId: params.id,
+    entityId: id,
     payload: parsed.data as Record<string, unknown>,
   });
 
   return NextResponse.json({ data: news });
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const adminClient = await createAdminClient();
 
@@ -87,11 +90,10 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
       { status: 403 }
     );
 
-  // Logical deletion only
   const { error } = await adminClient
     .from("news")
     .update({ deleted_at: new Date().toISOString() })
-    .eq("id", params.id)
+    .eq("id", id)
     .is("deleted_at", null);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -100,7 +102,7 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
     actorId: user.id,
     action: "news.delete",
     entityType: "news",
-    entityId: params.id,
+    entityId: id,
     payload: {},
   });
 

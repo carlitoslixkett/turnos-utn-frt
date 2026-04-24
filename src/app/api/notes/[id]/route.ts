@@ -3,19 +3,21 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { updateNoteSchema } from "@/lib/validations/notes";
 import { writeAuditLog } from "@/lib/utils/audit";
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const { data, error } = await supabase.from("notes").select("*").eq("id", params.id).single();
+  const { data, error } = await supabase.from("notes").select("*").eq("id", id).single();
   if (error || !data) return NextResponse.json({ error: "Nota no encontrada" }, { status: 404 });
   return NextResponse.json({ data });
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const adminClient = await createAdminClient();
 
@@ -42,7 +44,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const { data: pendingTurns } = await adminClient
       .from("turns")
       .select("id")
-      .eq("note_id", params.id)
+      .eq("note_id", id)
       .eq("status", "pending")
       .limit(1);
 
@@ -58,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const { data: activeIntervals } = await adminClient
       .from("interval_notes")
       .select("intervals!inner(is_active)")
-      .eq("note_id", params.id)
+      .eq("note_id", id)
       .limit(1);
 
     const hasActive = activeIntervals?.some(
@@ -75,7 +77,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     .from("notes")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .update(parsed.data as any)
-    .eq("id", params.id)
+    .eq("id", id)
     .select("*")
     .single();
 
@@ -85,7 +87,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     actorId: user.id,
     action: "note.update",
     entityType: "notes",
-    entityId: params.id,
+    entityId: id,
     payload: parsed.data as Record<string, unknown>,
   });
 

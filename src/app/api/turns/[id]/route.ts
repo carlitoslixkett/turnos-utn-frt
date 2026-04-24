@@ -10,7 +10,8 @@ const MAX_CANCEL_ATTEMPTS = 3;
 const MIN_DAYS_BEFORE_CANCEL = 3;
 
 // PATCH /api/turns/[id] — attend (worker F10/F12) or cancel (student)
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const adminClient = await createAdminClient();
 
@@ -26,7 +27,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     .single();
   if (!profile) return NextResponse.json({ error: "Perfil no encontrado" }, { status: 404 });
 
-  const { data: turn } = await adminClient.from("turns").select("*").eq("id", params.id).single();
+  const { data: turn } = await adminClient.from("turns").select("*").eq("id", id).single();
 
   if (!turn) return NextResponse.json({ error: "Turno no encontrado" }, { status: 404 });
 
@@ -39,22 +40,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       await adminClient
         .from("turns")
         .update({ status: "attended", attended_at: new Date().toISOString() })
-        .eq("id", params.id);
+        .eq("id", id);
       await writeAuditLog({
         actorId: user.id,
         action: "turn.attend",
         entityType: "turns",
-        entityId: params.id,
+        entityId: id,
       });
       return NextResponse.json({ message: "Turno atendido" });
     }
     if (action === "lost") {
-      await adminClient.from("turns").update({ status: "lost" }).eq("id", params.id);
+      await adminClient.from("turns").update({ status: "lost" }).eq("id", id);
       await writeAuditLog({
         actorId: user.id,
         action: "turn.lost",
         entityType: "turns",
-        entityId: params.id,
+        entityId: id,
       });
       return NextResponse.json({ message: "Turno marcado como ausente" });
     }
@@ -94,7 +95,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     // Validate security code
     const parsed = cancelTurnSchema.safeParse({
-      turn_id: params.id,
+      turn_id: id,
       security_code: body.security_code,
     });
     if (!parsed.success) {
@@ -112,16 +113,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ).toISOString();
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await adminClient
         .from("turns")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update(updates as any)
-        .eq("id", params.id);
+        .eq("id", id);
       await writeAuditLog({
         actorId: user.id,
         action: "turn.cancel_attempt_failed",
         entityType: "turns",
-        entityId: params.id,
+        entityId: id,
       });
 
       const remaining = MAX_CANCEL_ATTEMPTS - newAttempts;
@@ -142,13 +143,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     await adminClient
       .from("turns")
       .update({ status: "cancelled", cancel_attempts: 0, cancel_blocked_until: null })
-      .eq("id", params.id);
+      .eq("id", id);
 
     await writeAuditLog({
       actorId: user.id,
       action: "turn.cancel",
       entityType: "turns",
-      entityId: params.id,
+      entityId: id,
     });
 
     return NextResponse.json({ message: "Turno cancelado exitosamente" });

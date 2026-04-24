@@ -18,7 +18,8 @@ async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>, 
   return !!data;
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const adminClient = await createAdminClient();
 
@@ -37,41 +38,33 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   const { is_admin, deactivate } = parsed.data;
 
-  // Toggle admin role
   if (is_admin !== undefined) {
     if (is_admin) {
       await adminClient
         .from("worker_roles")
-        .upsert({ worker_id: params.id, role: "admin" }, { onConflict: "worker_id,role" });
+        .upsert({ worker_id: id, role: "admin" }, { onConflict: "worker_id,role" });
     } else {
-      await adminClient
-        .from("worker_roles")
-        .delete()
-        .eq("worker_id", params.id)
-        .eq("role", "admin");
+      await adminClient.from("worker_roles").delete().eq("worker_id", id).eq("role", "admin");
     }
 
     await writeAuditLog({
       actorId: user.id,
       action: is_admin ? "worker.grant_admin" : "worker.revoke_admin",
       entityType: "profiles",
-      entityId: params.id,
+      entityId: id,
       payload: {},
     });
   }
 
-  // Deactivate (ban) the worker via Supabase Auth
   if (deactivate) {
-    const { error } = await adminClient.auth.admin.updateUserById(params.id, {
-      ban_duration: "87600h",
-    });
+    const { error } = await adminClient.auth.admin.updateUserById(id, { ban_duration: "87600h" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await writeAuditLog({
       actorId: user.id,
       action: "worker.deactivate",
       entityType: "profiles",
-      entityId: params.id,
+      entityId: id,
       payload: {},
     });
   }
