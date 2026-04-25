@@ -4,6 +4,7 @@ import { updateIntervalSchema } from "@/lib/validations/intervals";
 import { writeAuditLog } from "@/lib/utils/audit";
 import { sendEmail } from "@/lib/email/send";
 import { intervalDeactivatedEmail } from "@/lib/email/templates";
+import { countSlots, parseWindows } from "@/lib/utils/interval-slots";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -100,9 +101,41 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { note_ids: _note_ids, ...intervalUpdate } = parsed.data;
 
+  const recalculatesQuantity =
+    intervalUpdate.date_start !== undefined ||
+    intervalUpdate.date_end !== undefined ||
+    intervalUpdate.turn_duration_minutes !== undefined ||
+    intervalUpdate.attention_windows !== undefined;
+
+  const updatePayload: Record<string, unknown> = { ...intervalUpdate };
+
+  if (recalculatesQuantity) {
+    const { data: current } = await adminClient
+      .from("intervals")
+      .select("date_start, date_end, turn_duration_minutes, attention_windows")
+      .eq("id", id)
+      .single();
+    if (!current) return NextResponse.json({ error: "Intervalo no encontrado" }, { status: 404 });
+
+    const dateStart = new Date(intervalUpdate.date_start ?? current.date_start);
+    const dateEnd = new Date(intervalUpdate.date_end ?? current.date_end);
+    const duration = intervalUpdate.turn_duration_minutes ?? current.turn_duration_minutes;
+    const windows = intervalUpdate.attention_windows ?? parseWindows(current.attention_windows);
+
+    const turnQuantity = countSlots(dateStart, dateEnd, duration, windows);
+    if (turnQuantity === 0 && intervalUpdate.is_active !== false) {
+      return NextResponse.json(
+        { error: "Los horarios de atención no generan ningún turno en el rango de fechas" },
+        { status: 400 }
+      );
+    }
+    updatePayload.turn_quantity = turnQuantity;
+  }
+
   const { data: interval, error } = await adminClient
     .from("intervals")
-    .update(intervalUpdate)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(updatePayload as any)
     .eq("id", id)
     .select("*")
     .single();

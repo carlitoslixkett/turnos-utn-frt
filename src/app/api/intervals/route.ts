@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { createIntervalSchema } from "@/lib/validations/intervals";
 import { writeAuditLog } from "@/lib/utils/audit";
+import { countSlots } from "@/lib/utils/interval-slots";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -63,11 +64,30 @@ export async function POST(request: NextRequest) {
   if (!parsed.success)
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
-  const { note_ids, ...intervalData } = parsed.data;
+  const { note_ids, attention_windows, ...intervalData } = parsed.data;
+
+  const turnQuantity = countSlots(
+    new Date(intervalData.date_start),
+    new Date(intervalData.date_end),
+    intervalData.turn_duration_minutes,
+    attention_windows
+  );
+
+  if (turnQuantity === 0) {
+    return NextResponse.json(
+      { error: "Los horarios de atención no generan ningún turno en el rango de fechas" },
+      { status: 400 }
+    );
+  }
 
   const { data: interval, error } = await adminClient
     .from("intervals")
-    .insert({ ...intervalData, created_by: user.id })
+    .insert({
+      ...intervalData,
+      attention_windows,
+      turn_quantity: turnQuantity,
+      created_by: user.id,
+    })
     .select("*")
     .single();
 

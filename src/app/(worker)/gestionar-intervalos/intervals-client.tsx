@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, ToggleLeft, ToggleRight, CalendarRange } from "lucide-react";
+import { Plus, Trash2, ToggleLeft, ToggleRight, CalendarRange, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,12 +10,29 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Interval } from "@/types";
 
+const WEEKDAYS = [
+  { value: 1, short: "Lun" },
+  { value: 2, short: "Mar" },
+  { value: 3, short: "Mié" },
+  { value: 4, short: "Jue" },
+  { value: 5, short: "Vie" },
+  { value: 6, short: "Sáb" },
+  { value: 7, short: "Dom" },
+];
+
 interface NoteOption {
   id: string;
   name: string;
 }
 
-interface IntervalWithNotes extends Interval {
+interface AttentionWindow {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+
+interface IntervalWithNotes extends Omit<Interval, "attention_windows"> {
+  attention_windows: AttentionWindow[] | null;
   interval_notes: { note_id: string; notes: { id: string; name: string } | null }[];
 }
 
@@ -33,6 +50,7 @@ export function IntervalsClient({ initialIntervals, notes }: IntervalsClientProp
     date_start: "",
     date_end: "",
     turn_duration_minutes: 15,
+    attention_windows: [] as AttentionWindow[],
     note_ids: [] as string[],
   });
 
@@ -49,11 +67,45 @@ export function IntervalsClient({ initialIntervals, notes }: IntervalsClientProp
     }));
   }
 
+  function addWindow() {
+    setForm((prev) => ({
+      ...prev,
+      attention_windows: [
+        ...prev.attention_windows,
+        { weekday: 1, start_time: "09:00", end_time: "12:00" },
+      ],
+    }));
+  }
+
+  function updateWindow(idx: number, patch: Partial<AttentionWindow>) {
+    setForm((prev) => ({
+      ...prev,
+      attention_windows: prev.attention_windows.map((w, i) => (i === idx ? { ...w, ...patch } : w)),
+    }));
+  }
+
+  function removeWindow(idx: number) {
+    setForm((prev) => ({
+      ...prev,
+      attention_windows: prev.attention_windows.filter((_, i) => i !== idx),
+    }));
+  }
+
   async function createInterval(e: React.FormEvent) {
     e.preventDefault();
     if (form.note_ids.length === 0) {
-      toast.error("Seleccioná al menos una nota");
+      toast.error("Seleccioná al menos un trámite");
       return;
+    }
+    if (form.attention_windows.length === 0) {
+      toast.error("Agregá al menos un horario de atención");
+      return;
+    }
+    for (const w of form.attention_windows) {
+      if (w.start_time >= w.end_time) {
+        toast.error("Cada horario debe tener fin posterior al inicio");
+        return;
+      }
     }
     setLoading(true);
     try {
@@ -114,7 +166,7 @@ export function IntervalsClient({ initialIntervals, notes }: IntervalsClientProp
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Crear intervalo</DialogTitle>
           </DialogHeader>
@@ -131,7 +183,7 @@ export function IntervalsClient({ initialIntervals, notes }: IntervalsClientProp
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="date-start">Inicio</Label>
+                <Label htmlFor="date-start">Apertura</Label>
                 <Input
                   id="date-start"
                   type="datetime-local"
@@ -141,7 +193,7 @@ export function IntervalsClient({ initialIntervals, notes }: IntervalsClientProp
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="date-end">Fin</Label>
+                <Label htmlFor="date-end">Cierre</Label>
                 <Input
                   id="date-end"
                   type="datetime-local"
@@ -163,8 +215,68 @@ export function IntervalsClient({ initialIntervals, notes }: IntervalsClientProp
                 required
               />
             </div>
+
             <div className="space-y-2">
-              <Label>Notas asociadas</Label>
+              <div className="flex items-center justify-between">
+                <Label>Horarios de atención</Label>
+                <button
+                  type="button"
+                  onClick={addWindow}
+                  className="text-xs font-medium text-[#E94A1F] hover:underline"
+                >
+                  + Agregar horario
+                </button>
+              </div>
+              {form.attention_windows.length === 0 ? (
+                <p className="text-muted-foreground rounded-lg border border-dashed py-3 text-center text-xs">
+                  Agregá los días y horas en que se atienden turnos
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {form.attention_windows.map((w, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg border p-2">
+                      <select
+                        value={w.weekday}
+                        onChange={(e) => updateWindow(i, { weekday: Number(e.target.value) })}
+                        className="border-input bg-background rounded-md border px-2 py-1.5 text-sm"
+                      >
+                        {WEEKDAYS.map((d) => (
+                          <option key={d.value} value={d.value}>
+                            {d.short}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        type="time"
+                        value={w.start_time}
+                        onChange={(e) => updateWindow(i, { start_time: e.target.value })}
+                        className="flex-1"
+                        required
+                      />
+                      <span className="text-muted-foreground text-xs">a</span>
+                      <Input
+                        type="time"
+                        value={w.end_time}
+                        onChange={(e) => updateWindow(i, { end_time: e.target.value })}
+                        className="flex-1"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeWindow(i)}
+                        aria-label="Eliminar horario"
+                        className="text-muted-foreground hover:text-destructive p-1"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Trámites asociados</Label>
               <div className="flex flex-wrap gap-2">
                 {notes.map((note) => (
                   <button
@@ -199,6 +311,9 @@ export function IntervalsClient({ initialIntervals, notes }: IntervalsClientProp
             const associatedNotes = interval.interval_notes
               .map((n) => n.notes?.name)
               .filter(Boolean);
+            const windows = Array.isArray(interval.attention_windows)
+              ? (interval.attention_windows as AttentionWindow[])
+              : [];
             return (
               <div key={interval.id} className="rounded-xl border bg-white px-4 py-3">
                 <div className="flex items-start justify-between gap-4">
@@ -211,17 +326,23 @@ export function IntervalsClient({ initialIntervals, notes }: IntervalsClientProp
                       </Badge>
                     </div>
                     <p className="text-muted-foreground text-sm">
-                      {new Date(interval.date_start).toLocaleString("es-AR", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}{" "}
-                      →{" "}
-                      {new Date(interval.date_end).toLocaleString("es-AR", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}{" "}
-                      · {interval.turn_duration_minutes} min · {interval.turn_quantity} turnos
+                      {new Date(interval.date_start).toLocaleDateString("es-AR")} →{" "}
+                      {new Date(interval.date_end).toLocaleDateString("es-AR")} ·{" "}
+                      {interval.turn_duration_minutes} min · {interval.turn_quantity} turnos
                     </p>
+                    {windows.length > 0 && (
+                      <div className="text-muted-foreground flex flex-wrap items-center gap-1 pt-1 text-xs">
+                        <Clock className="h-3 w-3" />
+                        {windows.map((w, i) => {
+                          const day = WEEKDAYS.find((d) => d.value === w.weekday);
+                          return (
+                            <span key={i} className="bg-muted rounded px-1.5 py-0.5">
+                              {day?.short} {w.start_time}–{w.end_time}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                     {associatedNotes.length > 0 && (
                       <div className="flex flex-wrap gap-1 pt-1">
                         {associatedNotes.map((n) => (

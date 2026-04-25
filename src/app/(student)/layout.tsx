@@ -14,6 +14,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
 
   if (!profile) redirect("/login");
+  if (profile.user_type !== "student") redirect("/atender");
 
   const { data: adminRole } = await supabase
     .from("worker_roles")

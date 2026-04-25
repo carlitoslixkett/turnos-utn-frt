@@ -3,8 +3,8 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { createTurnSchema } from "@/lib/validations/turns";
 import { writeAuditLog } from "@/lib/utils/audit";
 import bcrypt from "bcryptjs";
-import { addMinutes } from "date-fns";
 import crypto from "crypto";
+import { generateSlots, parseWindows } from "@/lib/utils/interval-slots";
 
 // GET /api/turns — list turns (student sees own, worker sees all)
 export async function GET(request: NextRequest) {
@@ -125,21 +125,23 @@ export async function POST(request: NextRequest) {
       .neq("status", "cancelled");
 
     const takenSlots = new Set((existingTurns ?? []).map((t: { date: string }) => t.date));
-    const totalSlots = interval.turn_quantity as number;
     const duration = interval.turn_duration_minutes as number;
-    const start = new Date(interval.date_start as string);
+    const dateStart = new Date(interval.date_start as string);
+    const dateEnd = new Date(interval.date_end as string);
+    const windows = parseWindows(interval.attention_windows);
+
+    const allSlots = generateSlots(dateStart, dateEnd, duration, windows);
+    const totalSlots = allSlots.length;
 
     let slot: Date | null = null;
-    for (let i = 0; i < totalSlots; i++) {
-      const candidate = addMinutes(start, i * duration);
+    for (const candidate of allSlots) {
       if (!takenSlots.has(candidate.toISOString()) && candidate >= preferredDate) {
         slot = candidate;
         break;
       }
     }
     if (!slot) {
-      for (let i = 0; i < totalSlots; i++) {
-        const candidate = addMinutes(start, i * duration);
+      for (const candidate of allSlots) {
         if (!takenSlots.has(candidate.toISOString())) {
           slot = candidate;
           break;

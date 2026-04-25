@@ -105,6 +105,7 @@ export type Database = {
       };
       intervals: {
         Row: {
+          attention_windows: Json;
           created_at: string;
           created_by: string;
           date_end: string;
@@ -119,6 +120,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          attention_windows?: Json;
           created_at?: string;
           created_by: string;
           date_end: string;
@@ -133,6 +135,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          attention_windows?: Json;
           created_at?: string;
           created_by?: string;
           date_end?: string;
