@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { updateIntervalSchema } from "@/lib/validations/intervals";
 import { writeAuditLog } from "@/lib/utils/audit";
+import { sendEmail } from "@/lib/email/send";
+import { intervalDeactivatedEmail } from "@/lib/email/templates";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -50,9 +54,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   // If deactivating, cancel pending turns and notify students
   if (parsed.data.is_active === false) {
+    const { data: intervalData } = await adminClient
+      .from("intervals")
+      .select("name")
+      .eq("id", id)
+      .single();
+
     const { data: pendingTurns } = await adminClient
       .from("turns")
-      .select("id, student_id, date, notes(name), profiles(full_name, email)")
+      .select("id, student_id, date, profile:profiles(full_name)")
       .eq("interval_id", id)
       .eq("status", "pending");
 
@@ -71,6 +81,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           entityId: turn.id,
           payload: { interval_id: id, reason: "interval_deactivated" },
         });
+
+        const profileData = turn.profile as { full_name: string } | null;
+        const { data: studentAuth } = await adminClient.auth.admin.getUserById(turn.student_id);
+        if (studentAuth?.user?.email) {
+          const tpl = intervalDeactivatedEmail({
+            fullName: profileData?.full_name ?? "Estudiante",
+            intervalName: intervalData?.name ?? "Intervalo",
+            turnDate: format(new Date(turn.date), "EEEE d 'de' MMMM, HH:mm", { locale: es }),
+            explanation: parsed.data.explain_desactivate ?? null,
+          });
+          await sendEmail({ to: studentAuth.user.email, subject: tpl.subject, html: tpl.html });
+        }
       }
     }
   }

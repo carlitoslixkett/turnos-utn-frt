@@ -109,24 +109,26 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Find interval with most capacity available
-  let assignedInterval = null;
-  let assignedSlot: Date | null = null;
+  // Build candidates: compute remaining capacity + best slot per interval
+  type Candidate = {
+    interval: (typeof intervals)[number];
+    slot: Date;
+    remaining: number;
+  };
+  const candidates: Candidate[] = [];
 
   for (const interval of intervals) {
     const { data: existingTurns } = await adminClient
       .from("turns")
       .select("date")
       .eq("interval_id", interval.id)
-      .neq("status", "cancelled")
-      .order("date", { ascending: true });
+      .neq("status", "cancelled");
 
     const takenSlots = new Set((existingTurns ?? []).map((t: { date: string }) => t.date));
     const totalSlots = interval.turn_quantity as number;
     const duration = interval.turn_duration_minutes as number;
     const start = new Date(interval.date_start as string);
 
-    // Generate all slots and find next free one at or after preferred_date
     let slot: Date | null = null;
     for (let i = 0; i < totalSlots; i++) {
       const candidate = addMinutes(start, i * duration);
@@ -135,9 +137,7 @@ export async function POST(request: NextRequest) {
         break;
       }
     }
-
     if (!slot) {
-      // Try any free slot in interval (even before preferred_date)
       for (let i = 0; i < totalSlots; i++) {
         const candidate = addMinutes(start, i * duration);
         if (!takenSlots.has(candidate.toISOString())) {
@@ -148,11 +148,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (slot) {
-      assignedInterval = interval;
-      assignedSlot = slot;
-      break;
+      candidates.push({ interval, slot, remaining: totalSlots - takenSlots.size });
     }
   }
+
+  // Rule: pick interval with MOST remaining turn_quantity (per use-case spec)
+  candidates.sort((a, b) => b.remaining - a.remaining);
+  const winner = candidates[0] ?? null;
+  const assignedInterval = winner?.interval ?? null;
+  const assignedSlot: Date | null = winner?.slot ?? null;
 
   if (!assignedInterval || !assignedSlot) {
     return NextResponse.json(

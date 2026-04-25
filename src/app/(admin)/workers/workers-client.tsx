@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Shield, ShieldOff, UserX } from "lucide-react";
+import { Plus, Shield, ShieldOff, UserX, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,6 +73,23 @@ export function WorkersClient({ initialWorkers }: WorkersClientProps) {
       )
     );
     toast.success(isAdmin ? "Rol admin removido" : "Rol admin asignado");
+  }
+
+  async function hardDelete(worker: WorkerWithRoles) {
+    if (
+      !confirm(`¿Eliminar definitivamente a ${worker.full_name}? Esta acción no se puede deshacer.`)
+    )
+      return;
+    if (!confirm(`Confirmá una vez más: escribí OK mentalmente. ¿Eliminar a ${worker.full_name}?`))
+      return;
+    const res = await fetch(`/api/workers/${worker.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const j = await res.json();
+      toast.error(j.error);
+      return;
+    }
+    setWorkers((prev) => prev.filter((w) => w.id !== worker.id));
+    toast.success(`${worker.full_name} eliminado.`);
   }
 
   async function deactivate(worker: WorkerWithRoles) {
@@ -198,6 +215,14 @@ export function WorkersClient({ initialWorkers }: WorkersClientProps) {
                       className="text-muted-foreground hover:text-destructive transition-colors"
                     >
                       <UserX className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => hardDelete(worker)}
+                      aria-label="Eliminar definitivamente"
+                      title="Eliminar definitivamente"
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="h-5 w-5" />
                     </button>
                   </div>
                 </li>

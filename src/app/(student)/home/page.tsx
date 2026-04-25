@@ -53,6 +53,7 @@ export default async function HomePage() {
         </div>
         <Button
           render={<Link href="/sacar-turno" />}
+          nativeButton={false}
           size="lg"
           className="rounded-2xl bg-[#E94A1F] px-6 font-bold text-white hover:bg-[#c73d18]"
         >
@@ -104,6 +105,7 @@ export default async function HomePage() {
                     </p>
                     <Button
                       render={<Link href={`/mis-turnos/${turn.id}`} />}
+                      nativeButton={false}
                       variant="outline"
                       size="sm"
                       className="mt-2 w-full rounded-xl"

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { cancelTurnSchema } from "@/lib/validations/turns";
 import { writeAuditLog } from "@/lib/utils/audit";
+import { sendEmail } from "@/lib/email/send";
+import { cancelLockoutEmail } from "@/lib/email/templates";
 import bcrypt from "bcryptjs";
 import { differenceInDays } from "date-fns";
 
@@ -127,6 +129,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
       const remaining = MAX_CANCEL_ATTEMPTS - newAttempts;
       if (remaining <= 0) {
+        const { data: studentProfile } = await adminClient
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .single();
+        const { data: studentAuth } = await adminClient.auth.admin.getUserById(user.id);
+        if (studentAuth?.user?.email) {
+          const tpl = cancelLockoutEmail({
+            fullName: studentProfile?.full_name ?? "Estudiante",
+            blockMinutes: CANCEL_BLOCK_MINUTES,
+          });
+          await sendEmail({ to: studentAuth.user.email, subject: tpl.subject, html: tpl.html });
+        }
         return NextResponse.json(
           { error: `Código incorrecto. Opción bloqueada por ${CANCEL_BLOCK_MINUTES} minutos.` },
           { status: 429 }

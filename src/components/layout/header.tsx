@@ -12,6 +12,7 @@ import { logoutAction } from "@/app/(auth)/login/actions";
 import type { Profile } from "@/types";
 import { LogOut, User } from "lucide-react";
 import Link from "next/link";
+import { UtnBrand } from "@/components/brand/utn-brand";
 
 interface HeaderProps {
   profile: Profile;
@@ -27,7 +28,7 @@ export function Header({ profile }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-white/95 px-4 backdrop-blur lg:px-6">
-      <span className="text-xl font-bold text-[#E94A1F] lg:hidden">UTN ✶ FRT</span>
+      <UtnBrand size="md" className="lg:hidden" />
       <span className="hidden text-xl font-bold text-[#E94A1F] lg:block">
         Gestión de Turnos — Departamento de Alumnos
       </span>

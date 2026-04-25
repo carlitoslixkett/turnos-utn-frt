@@ -71,3 +71,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return NextResponse.json({ success: true });
 }
+
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const adminClient = await createAdminClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  if (!(await requireAdmin(supabase, user.id)))
+    return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+
+  if (id === user.id) {
+    return NextResponse.json({ error: "No podés eliminar tu propia cuenta" }, { status: 400 });
+  }
+
+  const { error } = await adminClient.auth.admin.deleteUser(id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await writeAuditLog({
+    actorId: user.id,
+    action: "worker.delete",
+    entityType: "profiles",
+    entityId: id,
+    payload: {},
+  });
+
+  return NextResponse.json({ success: true });
+}

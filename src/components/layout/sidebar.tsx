@@ -13,11 +13,13 @@ import {
   Users,
   ClipboardList,
   CalendarRange,
+  FileSearch,
   Menu,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Profile } from "@/types";
+import { UtnBrand } from "@/components/brand/utn-brand";
 
 interface NavItem {
   href: string;
@@ -37,6 +39,7 @@ const navItems: NavItem[] = [
   { href: "/noticias-admin", label: "Noticias (Admin)", icon: Newspaper, roles: ["worker"] },
   { href: "/workers", label: "Gestión Workers", icon: Users, roles: ["admin"] },
   { href: "/metricas", label: "Métricas", icon: BarChart3, roles: ["admin"] },
+  { href: "/audit-log", label: "Audit Log", icon: FileSearch, roles: ["admin"] },
 ];
 
 interface SidebarProps {
@@ -71,7 +74,7 @@ export function Sidebar({ profile, isAdmin }: SidebarProps) {
       >
         {/* Header */}
         <div className="flex h-16 items-center justify-between border-b px-4">
-          <span className="text-lg font-bold text-[#E94A1F]">UTN ✶ FRT</span>
+          <UtnBrand size="sm" />
           <button
             className="hover:bg-muted rounded-md p-1 lg:hidden"
             onClick={() => setOpen(false)}

@@ -23,6 +23,13 @@ export async function loginAction(formData: FormData) {
     return { error: "Email o contraseña incorrectos" };
   }
 
+  if (data.user && !data.user.email_confirmed_at) {
+    await supabase.auth.signOut();
+    return {
+      error: "Tenés que verificar tu email antes de ingresar. Revisá tu casilla.",
+    };
+  }
+
   if (data.user) {
     await writeAuditLog({
       actorId: data.user.id,
@@ -32,7 +39,13 @@ export async function loginAction(formData: FormData) {
     });
   }
 
-  redirect("/home");
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("user_type")
+    .eq("id", data.user.id)
+    .single();
+
+  redirect(profile?.user_type === "worker" ? "/atender" : "/home");
 }
 
 export async function logoutAction() {
