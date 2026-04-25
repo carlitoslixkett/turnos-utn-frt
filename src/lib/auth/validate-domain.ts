@@ -4,5 +4,8 @@ export function isAllowedEmailDomain(email: string): boolean {
     .map((d) => d.trim().toLowerCase());
 
   const domain = email.split("@")[1]?.toLowerCase();
-  return !!domain && allowed.includes(domain);
+  if (!domain) return false;
+
+  // Accept exact match OR subdomain match (e.g. alu.frt.utn.edu.ar ends with frt.utn.edu.ar)
+  return allowed.some((d) => domain === d || domain.endsWith("." + d));
 }

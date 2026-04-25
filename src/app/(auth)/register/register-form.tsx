@@ -61,7 +61,7 @@ export function RegisterForm() {
           name="email"
           type="email"
           autoComplete="email"
-          placeholder="tu.nombre@frt.utn.edu.ar"
+          placeholder="nombre@alu.frt.utn.edu.ar"
           required
           disabled={isPending}
         />
@@ -116,7 +116,7 @@ export function RegisterForm() {
       </Button>
 
       <p className="text-muted-foreground text-center text-xs">
-        Solo se aceptan emails @frt.utn.edu.ar
+        Solo se aceptan emails @alu.frt.utn.edu.ar (alumnos) o @frt.utn.edu.ar (personal)
       </p>
     </form>
   );

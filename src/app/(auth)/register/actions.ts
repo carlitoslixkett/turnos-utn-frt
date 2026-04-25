@@ -17,7 +17,9 @@ export async function registerAction(formData: FormData) {
   const { email, password, full_name, dni, phone, legajo } = parsed.data;
 
   if (!isAllowedEmailDomain(email)) {
-    return { error: "Solo se aceptan emails institucionales (@frt.utn.edu.ar)" };
+    return {
+      error: "Solo se aceptan emails institucionales (@alu.frt.utn.edu.ar o @frt.utn.edu.ar)",
+    };
   }
 
   const supabase = await createClient();
