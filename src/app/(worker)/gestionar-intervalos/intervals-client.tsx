@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, ToggleLeft, ToggleRight, CalendarRange } from "lucide-react";
+import { Plus, ToggleLeft, ToggleRight, CalendarRange, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,8 @@ export function IntervalsClient({
   const [intervals, setIntervals] = useState<IntervalWithNotes[]>(initialIntervals);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState<IntervalWithNotes | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
     date_start: "",
@@ -93,6 +95,24 @@ export function IntervalsClient({
       window.location.reload();
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/intervals/${deleting.id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json.error ?? "Error al eliminar");
+        return;
+      }
+      setIntervals((prev) => prev.filter((i) => i.id !== deleting.id));
+      toast.success("Intervalo eliminado");
+      setDeleting(null);
+    } finally {
+      setDeleteLoading(false);
     }
   }
 
@@ -220,6 +240,35 @@ export function IntervalsClient({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!deleting} onOpenChange={(v) => !v && setDeleting(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Eliminar intervalo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>
+              ¿Seguro que querés eliminar <span className="font-semibold">{deleting?.name}</span>?
+            </p>
+            <p className="text-muted-foreground">
+              Si tiene turnos pendientes se cancelarán y se notificará a los estudiantes por email.
+              Si tiene turnos atendidos no se puede eliminar (desactivalo en su lugar).
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setDeleting(null)} disabled={deleteLoading}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={confirmDelete}
+                disabled={deleteLoading}
+                className="bg-destructive hover:bg-destructive/90 text-white"
+              >
+                {deleteLoading ? "Eliminando..." : "Eliminar"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="space-y-3">
         {intervals.length === 0 ? (
           <div className="text-muted-foreground rounded-xl border bg-white py-12 text-center text-sm">
@@ -256,17 +305,26 @@ export function IntervalsClient({
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => toggleActive(interval)}
-                    aria-label={interval.is_active ? "Desactivar intervalo" : "Activar intervalo"}
-                    className="text-muted-foreground hover:text-foreground mt-1 shrink-0 transition-colors"
-                  >
-                    {interval.is_active ? (
-                      <ToggleRight className="h-6 w-6 text-[#E94A1F]" />
-                    ) : (
-                      <ToggleLeft className="h-6 w-6" />
-                    )}
-                  </button>
+                  <div className="mt-1 flex shrink-0 items-center gap-2">
+                    <button
+                      onClick={() => toggleActive(interval)}
+                      aria-label={interval.is_active ? "Desactivar intervalo" : "Activar intervalo"}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {interval.is_active ? (
+                        <ToggleRight className="h-6 w-6 text-[#E94A1F]" />
+                      ) : (
+                        <ToggleLeft className="h-6 w-6" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setDeleting(interval)}
+                      aria-label="Eliminar intervalo"
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );

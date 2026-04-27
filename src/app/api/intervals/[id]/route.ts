@@ -170,3 +170,99 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return NextResponse.json({ data: interval });
 }
+
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const adminClient = await createAdminClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("user_type")
+    .eq("id", user.id)
+    .single();
+  if (!profile || profile.user_type !== "worker") {
+    return NextResponse.json(
+      { error: "Solo los empleados pueden eliminar intervalos" },
+      { status: 403 }
+    );
+  }
+
+  const { data: interval } = await adminClient
+    .from("intervals")
+    .select("id, name")
+    .eq("id", id)
+    .single();
+  if (!interval) {
+    return NextResponse.json({ error: "Intervalo no encontrado" }, { status: 404 });
+  }
+
+  // Refuse if there are attended or lost turns — those are part of the audit trail
+  const { count: historyCount } = await adminClient
+    .from("turns")
+    .select("id", { count: "exact", head: true })
+    .eq("interval_id", id)
+    .in("status", ["attended", "lost"]);
+
+  if ((historyCount ?? 0) > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Este intervalo tiene turnos atendidos o perdidos en el historial y no puede eliminarse. Desactivalo en su lugar.",
+      },
+      { status: 409 }
+    );
+  }
+
+  // Cancel any pending turns and notify students (same flow as deactivation)
+  const { data: pendingTurns } = await adminClient
+    .from("turns")
+    .select("id, student_id, date, profile:profiles(full_name)")
+    .eq("interval_id", id)
+    .eq("status", "pending");
+
+  if (pendingTurns && pendingTurns.length > 0) {
+    await adminClient
+      .from("turns")
+      .update({ status: "cancelled" })
+      .eq("interval_id", id)
+      .eq("status", "pending");
+
+    for (const turn of pendingTurns) {
+      const profileData = turn.profile as { full_name: string } | null;
+      const { data: studentAuth } = await adminClient.auth.admin.getUserById(turn.student_id);
+      if (studentAuth?.user?.email) {
+        const tpl = intervalDeactivatedEmail({
+          fullName: profileData?.full_name ?? "Estudiante",
+          intervalName: interval.name ?? "Intervalo",
+          turnDate: format(new Date(turn.date), "EEEE d 'de' MMMM, HH:mm", { locale: es }),
+          explanation: "El intervalo fue eliminado por el empleado.",
+        });
+        await sendEmail({ to: studentAuth.user.email, subject: tpl.subject, html: tpl.html });
+      }
+    }
+  }
+
+  // Remove all remaining turn rows (cancelled) so the FK doesn't block delete
+  await adminClient.from("turns").delete().eq("interval_id", id);
+
+  const { error: delError } = await adminClient.from("intervals").delete().eq("id", id);
+  if (delError) {
+    return NextResponse.json({ error: delError.message }, { status: 500 });
+  }
+
+  await writeAuditLog({
+    actorId: user.id,
+    action: "interval.delete",
+    entityType: "intervals",
+    entityId: id,
+    payload: { name: interval.name, cancelled_pending: pendingTurns?.length ?? 0 },
+  });
+
+  return NextResponse.json({ ok: true });
+}
