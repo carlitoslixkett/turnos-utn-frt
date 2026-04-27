@@ -244,7 +244,7 @@ export function IntervalsClient({
                     <p className="text-muted-foreground text-sm">
                       {formatDateForInput(interval.date_start).split("-").reverse().join("/")} →{" "}
                       {formatDateForInput(interval.date_end).split("-").reverse().join("/")} ·{" "}
-                      {interval.turn_duration_minutes} min · {interval.turn_quantity} turnos
+                      {interval.turn_quantity} turnos
                     </p>
                     {associatedNotes.length > 0 && (
                       <div className="flex flex-wrap gap-1 pt-1">
