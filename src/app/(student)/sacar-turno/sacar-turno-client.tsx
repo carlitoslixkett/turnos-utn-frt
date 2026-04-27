@@ -7,7 +7,7 @@ import { CalendarPlus, CheckCircle, Copy, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { TurnDocuments } from "@/components/turn/turn-documents";
+import { PendingFilesPicker } from "@/components/turn/pending-files-picker";
 
 interface NoteOption {
   id: string;
@@ -48,7 +48,11 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [pickedSlot, setPickedSlot] = useState<Slot | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(
+    null
+  );
   const [created, setCreated] = useState<CreatedTurn | null>(null);
 
   const availableNoteIds = useMemo(() => {
@@ -138,9 +142,32 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
         }
         return;
       }
+
+      // Upload any staged documents
+      if (pendingFiles.length > 0) {
+        setUploadProgress({ done: 0, total: pendingFiles.length });
+        let failed = 0;
+        for (let i = 0; i < pendingFiles.length; i++) {
+          const fd = new FormData();
+          fd.append("file", pendingFiles[i]);
+          const upRes = await fetch(`/api/turns/${json.data.id}/documents`, {
+            method: "POST",
+            body: fd,
+          });
+          if (!upRes.ok) failed++;
+          setUploadProgress({ done: i + 1, total: pendingFiles.length });
+        }
+        if (failed > 0) {
+          toast.error(
+            `${failed} archivo${failed > 1 ? "s" : ""} no se pudo subir. Subilos desde "Mis Turnos".`
+          );
+        }
+      }
+
       setCreated(json.data);
     } finally {
       setLoading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -156,6 +183,7 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
     setSelectedDay("");
     setSlots([]);
     setPickedSlot(null);
+    setPendingFiles([]);
   }
 
   if (created) {
@@ -192,15 +220,6 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
           <p className="mt-2 text-xs text-amber-700">
             Este código solo se muestra una vez. No lo compartas.
           </p>
-        </div>
-
-        <div className="space-y-2 rounded-xl border bg-white p-4">
-          <p className="text-sm font-medium">¿Querés adjuntar tus papeles ahora?</p>
-          <p className="text-muted-foreground text-xs">
-            Subí imágenes (JPG/PNG) o PDFs de la documentación requerida. El empleado los va a ver
-            al atenderte y no te van a pedir el papel físico.
-          </p>
-          <TurnDocuments turnId={created.id} />
         </div>
 
         <div className="flex gap-2">
@@ -324,12 +343,22 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
             </div>
           )}
 
+          {pickedSlot && (
+            <div className="rounded-xl border bg-white p-4">
+              <PendingFilesPicker files={pendingFiles} onChange={setPendingFiles} />
+            </div>
+          )}
+
           <Button
             type="submit"
             disabled={!selectedNote || !pickedSlot || loading}
             className="w-full"
           >
-            {loading ? "Procesando..." : "Confirmar turno"}
+            {loading
+              ? uploadProgress
+                ? `Subiendo documentos (${uploadProgress.done}/${uploadProgress.total})...`
+                : "Procesando..."
+              : "Confirmar turno"}
           </Button>
         </form>
       )}
