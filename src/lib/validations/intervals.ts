@@ -24,7 +24,6 @@ export const createIntervalSchema = z
     description: z.string().max(500).optional(),
     date_start: dateOrDatetime,
     date_end: dateOrDatetime,
-    turn_duration_minutes: z.number().int().min(5).max(120).default(15),
     note_ids: z.array(z.string().uuid()).min(1, "Seleccioná al menos un tipo de trámite"),
   })
   .refine((data) => new Date(data.date_end) >= new Date(data.date_start), {
@@ -37,7 +36,6 @@ export const updateIntervalSchema = z.object({
   description: z.string().max(500).optional(),
   date_start: dateOrDatetime.optional(),
   date_end: dateOrDatetime.optional(),
-  turn_duration_minutes: z.number().int().min(5).max(120).optional(),
   note_ids: z.array(z.string().uuid()).optional(),
   is_active: z.boolean().optional(),
   explain_desactivate: z.string().max(500).optional(),
@@ -49,6 +47,7 @@ export type UpdateIntervalInput = z.infer<typeof updateIntervalSchema>;
 
 export const officeSettingsSchema = z.object({
   attention_windows: z.array(attentionWindowSchema),
+  turn_duration_minutes: z.number().int().min(5).max(120),
 });
 
 export type OfficeSettingsInput = z.infer<typeof officeSettingsSchema>;

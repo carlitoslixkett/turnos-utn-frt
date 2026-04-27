@@ -370,6 +370,7 @@ export type Database = {
           id: number;
           attention_windows: Json;
           timezone: string;
+          turn_duration_minutes: number;
           updated_at: string;
           updated_by: string | null;
         };
@@ -377,6 +378,7 @@ export type Database = {
           id?: number;
           attention_windows?: Json;
           timezone?: string;
+          turn_duration_minutes?: number;
           updated_at?: string;
           updated_by?: string | null;
         };
@@ -384,6 +386,7 @@ export type Database = {
           id?: number;
           attention_windows?: Json;
           timezone?: string;
+          turn_duration_minutes?: number;
           updated_at?: string;
           updated_by?: string | null;
         };

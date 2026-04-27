@@ -5,7 +5,7 @@ import { writeAuditLog } from "@/lib/utils/audit";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { generateSlots } from "@/lib/utils/interval-slots";
-import { getGlobalAttentionWindows } from "@/lib/utils/office-settings";
+import { getOfficeSettings } from "@/lib/utils/office-settings";
 
 // GET /api/turns — list turns (student sees own, worker sees all)
 export async function GET(request: NextRequest) {
@@ -97,13 +97,11 @@ export async function POST(request: NextRequest) {
   // Path A: student picked an exact slot — validate it belongs to a valid window and isn't taken
   if (selected_date) {
     const slotDate = new Date(selected_date);
-    const globalWindows = await getGlobalAttentionWindows();
+    const settings = await getOfficeSettings();
 
     let intervalQuery = adminClient
       .from("intervals")
-      .select(
-        "id, name, date_start, date_end, turn_duration_minutes, interval_notes!inner(note_id)"
-      )
+      .select("id, name, date_start, date_end, interval_notes!inner(note_id)")
       .eq("is_active", true)
       .eq("interval_notes.note_id", note_id)
       .lte("date_start", slotDate.toISOString())
@@ -111,13 +109,17 @@ export async function POST(request: NextRequest) {
     if (selected_interval_id) intervalQuery = intervalQuery.eq("id", selected_interval_id);
 
     const { data: candidateIntervals } = await intervalQuery;
-    const matchingInterval = (candidateIntervals ?? []).find((interval) => {
-      const duration = interval.turn_duration_minutes as number;
+    const matchingInterval = (candidateIntervals ?? []).find(() => {
       const dayStart = new Date(slotDate);
       dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(slotDate);
       dayEnd.setHours(23, 59, 59, 999);
-      const slots = generateSlots(dayStart, dayEnd, duration, globalWindows);
+      const slots = generateSlots(
+        dayStart,
+        dayEnd,
+        settings.turn_duration_minutes,
+        settings.attention_windows
+      );
       return slots.some((s) => s.getTime() === slotDate.getTime());
     });
 
@@ -196,7 +198,7 @@ export async function POST(request: NextRequest) {
   // Find best interval: active, contains preferred_date, has note, has capacity
   const { data: intervals } = await adminClient
     .from("intervals")
-    .select("id, name, date_start, date_end, turn_duration_minutes, interval_notes!inner(note_id)")
+    .select("id, name, date_start, date_end, interval_notes!inner(note_id)")
     .eq("is_active", true)
     .eq("interval_notes.note_id", note_id)
     .lte("date_start", preferredDate.toISOString())
@@ -209,7 +211,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const globalWindows = await getGlobalAttentionWindows();
+  const settings = await getOfficeSettings();
 
   // Globally taken slots (any interval, any note)
   const { data: existingTurns } = await adminClient
@@ -227,11 +229,15 @@ export async function POST(request: NextRequest) {
   const candidates: Candidate[] = [];
 
   for (const interval of intervals) {
-    const duration = interval.turn_duration_minutes as number;
     const dateStart = new Date(interval.date_start as string);
     const dateEnd = new Date(interval.date_end as string);
 
-    const allSlots = generateSlots(dateStart, dateEnd, duration, globalWindows);
+    const allSlots = generateSlots(
+      dateStart,
+      dateEnd,
+      settings.turn_duration_minutes,
+      settings.attention_windows
+    );
     const totalSlots = allSlots.length;
 
     let slot: Date | null = null;

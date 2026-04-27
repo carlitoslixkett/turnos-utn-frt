@@ -8,7 +8,7 @@ import { countSlots } from "@/lib/utils/interval-slots";
 import {
   dateOnlyToOfficeEnd,
   dateOnlyToOfficeStart,
-  getGlobalAttentionWindows,
+  getOfficeSettings,
 } from "@/lib/utils/office-settings";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -120,24 +120,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const recalculatesQuantity =
-    intervalUpdate.date_start !== undefined ||
-    intervalUpdate.date_end !== undefined ||
-    intervalUpdate.turn_duration_minutes !== undefined;
+    intervalUpdate.date_start !== undefined || intervalUpdate.date_end !== undefined;
 
   if (recalculatesQuantity) {
     const { data: current } = await adminClient
       .from("intervals")
-      .select("date_start, date_end, turn_duration_minutes")
+      .select("date_start, date_end")
       .eq("id", id)
       .single();
     if (!current) return NextResponse.json({ error: "Intervalo no encontrado" }, { status: 404 });
 
     const dateStart = new Date((updatePayload.date_start as string) ?? current.date_start);
     const dateEnd = new Date((updatePayload.date_end as string) ?? current.date_end);
-    const duration = intervalUpdate.turn_duration_minutes ?? current.turn_duration_minutes;
-    const windows = await getGlobalAttentionWindows();
+    const settings = await getOfficeSettings();
 
-    const turnQuantity = countSlots(dateStart, dateEnd, duration, windows);
+    const turnQuantity = countSlots(
+      dateStart,
+      dateEnd,
+      settings.turn_duration_minutes,
+      settings.attention_windows
+    );
     if (turnQuantity === 0 && intervalUpdate.is_active !== false) {
       return NextResponse.json(
         { error: "Los horarios de atención no generan ningún turno en el rango de fechas" },
@@ -145,6 +147,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       );
     }
     updatePayload.turn_quantity = turnQuantity;
+    updatePayload.turn_duration_minutes = settings.turn_duration_minutes;
   }
 
   const { data: interval, error } = await adminClient

@@ -45,7 +45,6 @@ export function IntervalsClient({
     name: "",
     date_start: "",
     date_end: "",
-    turn_duration_minutes: 15,
     note_ids: [] as string[],
   });
 
@@ -79,7 +78,6 @@ export function IntervalsClient({
         name: form.name,
         date_start: form.date_start,
         date_end: form.date_end,
-        turn_duration_minutes: form.turn_duration_minutes,
         note_ids: form.note_ids,
       };
       const res = await fetch("/api/intervals", {
@@ -185,21 +183,8 @@ export function IntervalsClient({
                 />
               </div>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="duration">Duración del turno (minutos)</Label>
-              <Input
-                id="duration"
-                type="number"
-                min={5}
-                max={120}
-                value={form.turn_duration_minutes}
-                onChange={(e) => setField("turn_duration_minutes", Number(e.target.value))}
-                required
-              />
-            </div>
-
             <div className="bg-muted/40 text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs">
-              Los días y horas de atención se configuran de forma global en{" "}
+              Los días, horas y duración del turno se configuran de forma global en{" "}
               <Link
                 href="/horarios-atencion"
                 className="font-medium text-[#E94A1F] hover:underline"

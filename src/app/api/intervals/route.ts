@@ -6,7 +6,7 @@ import { countSlots } from "@/lib/utils/interval-slots";
 import {
   dateOnlyToOfficeEnd,
   dateOnlyToOfficeStart,
-  getGlobalAttentionWindows,
+  getOfficeSettings,
 } from "@/lib/utils/office-settings";
 
 export async function GET(request: NextRequest) {
@@ -79,9 +79,9 @@ export async function POST(request: NextRequest) {
     ? dateOnlyToOfficeEnd(intervalData.date_end)
     : new Date(intervalData.date_end).toISOString();
 
-  const globalWindows = await getGlobalAttentionWindows();
+  const settings = await getOfficeSettings();
 
-  if (globalWindows.length === 0) {
+  if (settings.attention_windows.length === 0) {
     return NextResponse.json(
       {
         error: "Configurá primero los horarios de atención en la sección 'Horarios de Atención'.",
@@ -93,8 +93,8 @@ export async function POST(request: NextRequest) {
   const turnQuantity = countSlots(
     new Date(dateStartIso),
     new Date(dateEndIso),
-    intervalData.turn_duration_minutes,
-    globalWindows
+    settings.turn_duration_minutes,
+    settings.attention_windows
   );
 
   if (turnQuantity === 0) {
@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
       ...intervalData,
       date_start: dateStartIso,
       date_end: dateEndIso,
+      turn_duration_minutes: settings.turn_duration_minutes,
       turn_quantity: turnQuantity,
       created_by: user.id,
     })

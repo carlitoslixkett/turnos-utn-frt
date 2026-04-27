@@ -13,12 +13,16 @@ export async function GET() {
   const admin = await createAdminClient();
   const { data, error } = await admin
     .from("office_settings")
-    .select("attention_windows, timezone, updated_at")
+    .select("attention_windows, timezone, turn_duration_minutes, updated_at")
     .eq("id", 1)
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({
-    data: data ?? { attention_windows: [], timezone: "America/Argentina/Buenos_Aires" },
+    data: data ?? {
+      attention_windows: [],
+      timezone: "America/Argentina/Buenos_Aires",
+      turn_duration_minutes: 15,
+    },
   });
 }
 
@@ -50,16 +54,17 @@ export async function PUT(request: NextRequest) {
     .from("office_settings")
     .update({
       attention_windows: parsed.data.attention_windows,
+      turn_duration_minutes: parsed.data.turn_duration_minutes,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     })
     .eq("id", 1);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Recompute turn_quantity for all active intervals so the metrics view reflects new windows
+  // Recompute turn_quantity + duration for all active intervals
   const { data: intervals } = await admin
     .from("intervals")
-    .select("id, date_start, date_end, turn_duration_minutes")
+    .select("id, date_start, date_end")
     .eq("is_active", true);
   if (intervals && intervals.length > 0) {
     const { countSlots } = await import("@/lib/utils/interval-slots");
@@ -67,10 +72,16 @@ export async function PUT(request: NextRequest) {
       const qty = countSlots(
         new Date(i.date_start as string),
         new Date(i.date_end as string),
-        i.turn_duration_minutes as number,
+        parsed.data.turn_duration_minutes,
         parsed.data.attention_windows
       );
-      await admin.from("intervals").update({ turn_quantity: qty }).eq("id", i.id);
+      await admin
+        .from("intervals")
+        .update({
+          turn_quantity: qty,
+          turn_duration_minutes: parsed.data.turn_duration_minutes,
+        })
+        .eq("id", i.id);
     }
   }
 

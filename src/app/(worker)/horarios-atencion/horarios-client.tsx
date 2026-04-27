@@ -55,12 +55,19 @@ function blocksToWindows(blocks: Block[]): AttentionWindow[] {
   return out;
 }
 
-export function HorariosClient({ initialWindows }: { initialWindows: AttentionWindow[] }) {
+export function HorariosClient({
+  initialWindows,
+  initialDuration,
+}: {
+  initialWindows: AttentionWindow[];
+  initialDuration: number;
+}) {
   const [blocks, setBlocks] = useState<Block[]>(
     initialWindows.length > 0
       ? windowsToBlocks(initialWindows)
       : [{ days: [1, 2, 3, 4, 5], start_time: "09:00", end_time: "12:00" }]
   );
+  const [duration, setDuration] = useState(initialDuration);
   const [saving, setSaving] = useState(false);
 
   function toggleDay(idx: number, day: number) {
@@ -116,12 +123,20 @@ export function HorariosClient({ initialWindows }: { initialWindows: AttentionWi
       keys.add(k);
     }
 
+    if (duration < 5 || duration > 120) {
+      toast.error("La duración debe estar entre 5 y 120 minutos");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/api/office-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attention_windows: windows }),
+        body: JSON.stringify({
+          attention_windows: windows,
+          turn_duration_minutes: duration,
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -142,6 +157,25 @@ export function HorariosClient({ initialWindows }: { initialWindows: AttentionWi
           Configurá los días y horas en que se atienden turnos. Aplica a todos los intervalos
           activos.
         </p>
+      </div>
+
+      <div className="space-y-3 rounded-xl border bg-white p-4">
+        <Label htmlFor="duration" className="text-sm font-medium">
+          Duración de cada turno (minutos)
+        </Label>
+        <p className="text-muted-foreground text-xs">
+          Cada turno dura este tiempo. Aplica a todos los trámites.
+        </p>
+        <Input
+          id="duration"
+          type="number"
+          min={5}
+          max={120}
+          step={5}
+          value={duration}
+          onChange={(e) => setDuration(Number(e.target.value))}
+          className="max-w-xs"
+        />
       </div>
 
       <div className="space-y-4">

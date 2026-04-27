@@ -11,6 +11,22 @@ export async function getGlobalAttentionWindows(): Promise<AttentionWindow[]> {
   return parseWindows(data?.attention_windows);
 }
 
+export async function getOfficeSettings(): Promise<{
+  attention_windows: AttentionWindow[];
+  turn_duration_minutes: number;
+}> {
+  const admin = await createAdminClient();
+  const { data } = await admin
+    .from("office_settings")
+    .select("attention_windows, turn_duration_minutes")
+    .eq("id", 1)
+    .maybeSingle();
+  return {
+    attention_windows: parseWindows(data?.attention_windows),
+    turn_duration_minutes: data?.turn_duration_minutes ?? 15,
+  };
+}
+
 // Convert "YYYY-MM-DD" to start-of-day in office TZ as ISO UTC string for DB storage
 export function dateOnlyToOfficeStart(yyyymmdd: string): string {
   const offsetMin = officeOffsetMinutes(yyyymmdd);

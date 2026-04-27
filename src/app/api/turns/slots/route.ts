@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { generateSlots } from "@/lib/utils/interval-slots";
-import { getGlobalAttentionWindows } from "@/lib/utils/office-settings";
+import { getOfficeSettings } from "@/lib/utils/office-settings";
 
 // GET /api/turns/slots?note_id=...&date=YYYY-MM-DD
 // Returns globally available slots for a given trámite on a given calendar day.
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   const admin = await createAdminClient();
   const { data: intervals, error: intervalsError } = await admin
     .from("intervals")
-    .select("id, name, date_start, date_end, turn_duration_minutes, interval_notes!inner(note_id)")
+    .select("id, name, date_start, date_end, interval_notes!inner(note_id)")
     .eq("is_active", true)
     .eq("interval_notes.note_id", note_id)
     .lte("date_start", dayEnd.toISOString())
@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: [] });
   }
 
-  const windows = await getGlobalAttentionWindows();
-  if (windows.length === 0) return NextResponse.json({ data: [] });
+  const settings = await getOfficeSettings();
+  if (settings.attention_windows.length === 0) return NextResponse.json({ data: [] });
 
   // Globally taken active turns on this calendar day (any interval, any note)
   const { data: takenTurns } = await admin
@@ -60,14 +60,18 @@ export async function GET(request: NextRequest) {
   // first interval that covers each slot (slots are global, not per interval).
   const slotMap = new Map<string, { interval_id: string; interval_name: string; date: string }>();
   for (const interval of intervals) {
-    const duration = interval.turn_duration_minutes as number;
     const lo = new Date(
       Math.max(dayStart.getTime(), new Date(interval.date_start as string).getTime())
     );
     const hi = new Date(
       Math.min(dayEnd.getTime(), new Date(interval.date_end as string).getTime())
     );
-    const generated = generateSlots(lo, hi, duration, windows);
+    const generated = generateSlots(
+      lo,
+      hi,
+      settings.turn_duration_minutes,
+      settings.attention_windows
+    );
     for (const slot of generated) {
       if (slot < now) continue;
       const iso = slot.toISOString();

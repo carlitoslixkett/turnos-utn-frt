@@ -8,9 +8,10 @@ export default async function HorariosAtencionPage() {
   const admin = await createAdminClient();
   const { data } = await admin
     .from("office_settings")
-    .select("attention_windows")
+    .select("attention_windows, turn_duration_minutes")
     .eq("id", 1)
     .maybeSingle();
   const initialWindows = parseWindows(data?.attention_windows);
-  return <HorariosClient initialWindows={initialWindows} />;
+  const initialDuration = data?.turn_duration_minutes ?? 15;
+  return <HorariosClient initialWindows={initialWindows} initialDuration={initialDuration} />;
 }
