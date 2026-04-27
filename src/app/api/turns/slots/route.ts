@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { generateSlots, parseWindows } from "@/lib/utils/interval-slots";
+import { generateSlots } from "@/lib/utils/interval-slots";
+import { getGlobalAttentionWindows } from "@/lib/utils/office-settings";
 
 // GET /api/turns/slots?note_id=...&date=YYYY-MM-DD
-// Returns available slots for a given trámite on a given calendar day,
-// across every active interval that supports that note.
+// Returns globally available slots for a given trámite on a given calendar day.
+// Slots are global (one office = one slot at a time), but only times during which
+// at least one active interval covers this trámite are returned.
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
   const admin = await createAdminClient();
   const { data: intervals, error: intervalsError } = await admin
     .from("intervals")
-    .select("*, interval_notes!inner(note_id)")
+    .select("id, name, date_start, date_end, turn_duration_minutes, interval_notes!inner(note_id)")
     .eq("is_active", true)
     .eq("interval_notes.note_id", note_id)
     .lte("date_start", dayEnd.toISOString())
@@ -41,51 +43,44 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: [] });
   }
 
-  const intervalIds = intervals.map((i) => i.id as string);
+  const windows = await getGlobalAttentionWindows();
+  if (windows.length === 0) return NextResponse.json({ data: [] });
 
+  // Globally taken active turns on this calendar day (any interval, any note)
   const { data: takenTurns } = await admin
     .from("turns")
-    .select("interval_id, date")
-    .in("interval_id", intervalIds)
+    .select("date")
     .gte("date", dayStart.toISOString())
     .lte("date", dayEnd.toISOString())
     .in("status", ["pending", "attended"]);
 
-  const taken = new Set(
-    (takenTurns ?? []).map((t) => `${t.interval_id}|${new Date(t.date).toISOString()}`)
-  );
+  const taken = new Set((takenTurns ?? []).map((t) => new Date(t.date).toISOString()));
 
-  const slots: { interval_id: string; interval_name: string; date: string }[] = [];
+  // For each interval covering this note + day, compute its slots and pick the
+  // first interval that covers each slot (slots are global, not per interval).
+  const slotMap = new Map<string, { interval_id: string; interval_name: string; date: string }>();
   for (const interval of intervals) {
     const duration = interval.turn_duration_minutes as number;
-    const windows = parseWindows(interval.attention_windows);
-    const dayWindowStart = new Date(
+    const lo = new Date(
       Math.max(dayStart.getTime(), new Date(interval.date_start as string).getTime())
     );
-    const dayWindowEnd = new Date(
+    const hi = new Date(
       Math.min(dayEnd.getTime(), new Date(interval.date_end as string).getTime())
     );
-    const generated = generateSlots(dayWindowStart, dayWindowEnd, duration, windows);
+    const generated = generateSlots(lo, hi, duration, windows);
     for (const slot of generated) {
       if (slot < now) continue;
-      const key = `${interval.id}|${slot.toISOString()}`;
-      if (taken.has(key)) continue;
-      slots.push({
+      const iso = slot.toISOString();
+      if (taken.has(iso)) continue;
+      if (slotMap.has(iso)) continue;
+      slotMap.set(iso, {
         interval_id: interval.id as string,
         interval_name: interval.name as string,
-        date: slot.toISOString(),
+        date: iso,
       });
     }
   }
 
-  // Deduplicate by exact ISO date (if multiple intervals overlap, keep first)
-  const seen = new Set<string>();
-  const deduped = slots.filter((s) => {
-    if (seen.has(s.date)) return false;
-    seen.add(s.date);
-    return true;
-  });
-  deduped.sort((a, b) => a.date.localeCompare(b.date));
-
-  return NextResponse.json({ data: deduped });
+  const result = Array.from(slotMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  return NextResponse.json({ data: result });
 }

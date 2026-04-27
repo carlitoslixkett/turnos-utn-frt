@@ -4,7 +4,12 @@ import { updateIntervalSchema } from "@/lib/validations/intervals";
 import { writeAuditLog } from "@/lib/utils/audit";
 import { sendEmail } from "@/lib/email/send";
 import { intervalDeactivatedEmail } from "@/lib/email/templates";
-import { countSlots, parseWindows } from "@/lib/utils/interval-slots";
+import { countSlots } from "@/lib/utils/interval-slots";
+import {
+  dateOnlyToOfficeEnd,
+  dateOnlyToOfficeStart,
+  getGlobalAttentionWindows,
+} from "@/lib/utils/office-settings";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -101,26 +106,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { note_ids: _note_ids, ...intervalUpdate } = parsed.data;
 
+  // Normalize date inputs (accept plain YYYY-MM-DD)
+  const updatePayload: Record<string, unknown> = { ...intervalUpdate };
+  if (typeof intervalUpdate.date_start === "string") {
+    updatePayload.date_start = /^\d{4}-\d{2}-\d{2}$/.test(intervalUpdate.date_start)
+      ? dateOnlyToOfficeStart(intervalUpdate.date_start)
+      : new Date(intervalUpdate.date_start).toISOString();
+  }
+  if (typeof intervalUpdate.date_end === "string") {
+    updatePayload.date_end = /^\d{4}-\d{2}-\d{2}$/.test(intervalUpdate.date_end)
+      ? dateOnlyToOfficeEnd(intervalUpdate.date_end)
+      : new Date(intervalUpdate.date_end).toISOString();
+  }
+
   const recalculatesQuantity =
     intervalUpdate.date_start !== undefined ||
     intervalUpdate.date_end !== undefined ||
-    intervalUpdate.turn_duration_minutes !== undefined ||
-    intervalUpdate.attention_windows !== undefined;
-
-  const updatePayload: Record<string, unknown> = { ...intervalUpdate };
+    intervalUpdate.turn_duration_minutes !== undefined;
 
   if (recalculatesQuantity) {
     const { data: current } = await adminClient
       .from("intervals")
-      .select("date_start, date_end, turn_duration_minutes, attention_windows")
+      .select("date_start, date_end, turn_duration_minutes")
       .eq("id", id)
       .single();
     if (!current) return NextResponse.json({ error: "Intervalo no encontrado" }, { status: 404 });
 
-    const dateStart = new Date(intervalUpdate.date_start ?? current.date_start);
-    const dateEnd = new Date(intervalUpdate.date_end ?? current.date_end);
+    const dateStart = new Date((updatePayload.date_start as string) ?? current.date_start);
+    const dateEnd = new Date((updatePayload.date_end as string) ?? current.date_end);
     const duration = intervalUpdate.turn_duration_minutes ?? current.turn_duration_minutes;
-    const windows = intervalUpdate.attention_windows ?? parseWindows(current.attention_windows);
+    const windows = await getGlobalAttentionWindows();
 
     const turnQuantity = countSlots(dateStart, dateEnd, duration, windows);
     if (turnQuantity === 0 && intervalUpdate.is_active !== false) {

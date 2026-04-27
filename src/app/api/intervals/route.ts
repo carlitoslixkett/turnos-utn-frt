@@ -3,6 +3,11 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { createIntervalSchema } from "@/lib/validations/intervals";
 import { writeAuditLog } from "@/lib/utils/audit";
 import { countSlots } from "@/lib/utils/interval-slots";
+import {
+  dateOnlyToOfficeEnd,
+  dateOnlyToOfficeStart,
+  getGlobalAttentionWindows,
+} from "@/lib/utils/office-settings";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -64,13 +69,32 @@ export async function POST(request: NextRequest) {
   if (!parsed.success)
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
-  const { note_ids, attention_windows, ...intervalData } = parsed.data;
+  const { note_ids, ...intervalData } = parsed.data;
+
+  // Normalize date inputs: if a plain YYYY-MM-DD was sent, anchor to office TZ start/end
+  const dateStartIso = /^\d{4}-\d{2}-\d{2}$/.test(intervalData.date_start)
+    ? dateOnlyToOfficeStart(intervalData.date_start)
+    : new Date(intervalData.date_start).toISOString();
+  const dateEndIso = /^\d{4}-\d{2}-\d{2}$/.test(intervalData.date_end)
+    ? dateOnlyToOfficeEnd(intervalData.date_end)
+    : new Date(intervalData.date_end).toISOString();
+
+  const globalWindows = await getGlobalAttentionWindows();
+
+  if (globalWindows.length === 0) {
+    return NextResponse.json(
+      {
+        error: "Configurá primero los horarios de atención en la sección 'Horarios de Atención'.",
+      },
+      { status: 400 }
+    );
+  }
 
   const turnQuantity = countSlots(
-    new Date(intervalData.date_start),
-    new Date(intervalData.date_end),
+    new Date(dateStartIso),
+    new Date(dateEndIso),
     intervalData.turn_duration_minutes,
-    attention_windows
+    globalWindows
   );
 
   if (turnQuantity === 0) {
@@ -84,7 +108,8 @@ export async function POST(request: NextRequest) {
     .from("intervals")
     .insert({
       ...intervalData,
-      attention_windows,
+      date_start: dateStartIso,
+      date_end: dateEndIso,
       turn_quantity: turnQuantity,
       created_by: user.id,
     })

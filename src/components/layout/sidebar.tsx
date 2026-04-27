@@ -16,6 +16,7 @@ import {
   FileSearch,
   Menu,
   X,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Profile } from "@/types";
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { href: "/atender", label: "Atender Turnos", icon: ClipboardList, roles: ["worker"] },
   { href: "/gestionar-notas", label: "Notas", icon: LayoutDashboard, roles: ["worker"] },
   { href: "/gestionar-intervalos", label: "Intervalos", icon: CalendarRange, roles: ["worker"] },
+  { href: "/horarios-atencion", label: "Horarios de Atención", icon: Clock, roles: ["worker"] },
   { href: "/noticias-admin", label: "Noticias (Admin)", icon: Newspaper, roles: ["worker"] },
   { href: "/workers", label: "Gestión Workers", icon: Users, roles: ["admin"] },
   { href: "/metricas", label: "Métricas", icon: BarChart3, roles: ["admin"] },
