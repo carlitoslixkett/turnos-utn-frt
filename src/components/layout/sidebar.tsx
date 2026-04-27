@@ -30,15 +30,16 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: "/home", label: "Home", icon: Home },
+  { href: "/home", label: "Home", icon: Home, roles: ["student"] },
+  { href: "/dashboard", label: "Inicio", icon: Home, roles: ["worker"] },
   { href: "/sacar-turno", label: "Sacar Turno", icon: CalendarPlus, roles: ["student"] },
   { href: "/mis-turnos", label: "Mis Turnos", icon: CalendarDays, roles: ["student"] },
-  { href: "/noticias", label: "Noticias", icon: Newspaper },
+  { href: "/noticias", label: "Noticias", icon: Newspaper, roles: ["student"] },
   { href: "/atender", label: "Atender Turnos", icon: ClipboardList, roles: ["worker"] },
   { href: "/gestionar-notas", label: "Notas", icon: LayoutDashboard, roles: ["worker"] },
   { href: "/gestionar-intervalos", label: "Intervalos", icon: CalendarRange, roles: ["worker"] },
   { href: "/horarios-atencion", label: "Horarios de Atención", icon: Clock, roles: ["worker"] },
-  { href: "/noticias-admin", label: "Noticias (Admin)", icon: Newspaper, roles: ["worker"] },
+  { href: "/noticias-admin", label: "Noticias", icon: Newspaper, roles: ["worker"] },
   { href: "/workers", label: "Gestión Workers", icon: Users, roles: ["admin"] },
   { href: "/metricas", label: "Métricas", icon: BarChart3, roles: ["admin"] },
   { href: "/audit-log", label: "Audit Log", icon: FileSearch, roles: ["admin"] },

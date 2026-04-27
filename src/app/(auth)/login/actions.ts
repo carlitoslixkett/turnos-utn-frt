@@ -47,7 +47,7 @@ export async function loginAction(formData: FormData) {
     .eq("id", data.user.id)
     .single();
 
-  redirect(profile?.user_type === "worker" ? "/atender" : "/home");
+  redirect(profile?.user_type === "worker" ? "/dashboard" : "/home");
 }
 
 export async function logoutAction() {
