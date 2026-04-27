@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
-  const { note_id, preferred_date } = parsed.data;
-  const preferredDate = new Date(preferred_date);
+  const { note_id, preferred_date, selected_date, selected_interval_id } = parsed.data;
+  const preferredDate = new Date(selected_date ?? preferred_date!);
 
   // Rule 1: student cannot have 2 pending turns with same note
   const { data: existing } = await adminClient
@@ -90,6 +90,102 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Ya tenés un turno pendiente para este tipo de trámite" },
       { status: 409 }
+    );
+  }
+
+  // Path A: student picked an exact slot — validate it belongs to a valid window and isn't taken
+  if (selected_date) {
+    const slotDate = new Date(selected_date);
+    let intervalQuery = adminClient
+      .from("intervals")
+      .select("*, interval_notes!inner(note_id)")
+      .eq("is_active", true)
+      .eq("interval_notes.note_id", note_id)
+      .lte("date_start", slotDate.toISOString())
+      .gte("date_end", slotDate.toISOString());
+    if (selected_interval_id) intervalQuery = intervalQuery.eq("id", selected_interval_id);
+
+    const { data: candidateIntervals } = await intervalQuery;
+    const matchingInterval = (candidateIntervals ?? []).find((interval) => {
+      const duration = interval.turn_duration_minutes as number;
+      const windows = parseWindows(interval.attention_windows);
+      const dayStart = new Date(slotDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(slotDate);
+      dayEnd.setHours(23, 59, 59, 999);
+      const slots = generateSlots(dayStart, dayEnd, duration, windows);
+      return slots.some((s) => s.getTime() === slotDate.getTime());
+    });
+
+    if (!matchingInterval) {
+      return NextResponse.json(
+        { error: "Ese horario no está disponible para este trámite" },
+        { status: 400 }
+      );
+    }
+
+    const { data: taken } = await adminClient
+      .from("turns")
+      .select("id")
+      .eq("interval_id", matchingInterval.id)
+      .eq("date", slotDate.toISOString())
+      .in("status", ["pending", "attended"])
+      .maybeSingle();
+
+    if (taken) {
+      return NextResponse.json(
+        { error: "Ese horario ya fue tomado por otro estudiante" },
+        { status: 409 }
+      );
+    }
+
+    const securityCode = crypto.randomInt(100000, 999999).toString();
+    const securityCodeHash = await bcrypt.hash(securityCode, 12);
+
+    const { data: turn, error: turnError } = await adminClient
+      .from("turns")
+      .insert({
+        student_id: user.id,
+        interval_id: matchingInterval.id,
+        note_id,
+        date: slotDate.toISOString(),
+        status: "pending",
+        security_code_hash: securityCodeHash,
+        cancel_attempts: 0,
+      })
+      .select("*")
+      .single();
+
+    if (turnError) {
+      // 23505 = unique_violation (uniq_turns_interval_date_active)
+      if ((turnError as { code?: string }).code === "23505") {
+        return NextResponse.json(
+          { error: "Ese horario ya fue tomado por otro estudiante" },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({ error: "Error al crear el turno" }, { status: 500 });
+    }
+
+    await writeAuditLog({
+      actorId: user.id,
+      action: "turn.create",
+      entityType: "turns",
+      entityId: turn.id,
+      payload: {
+        note_id,
+        interval_id: matchingInterval.id,
+        date: slotDate.toISOString(),
+        mode: "selected",
+      },
+    });
+
+    return NextResponse.json(
+      {
+        data: { ...turn, security_code: securityCode },
+        message: "Turno creado exitosamente. Guardá tu código de seguridad.",
+      },
+      { status: 201 }
     );
   }
 
@@ -186,6 +282,12 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (turnError) {
+    if ((turnError as { code?: string }).code === "23505") {
+      return NextResponse.json(
+        { error: "Ese horario fue tomado mientras procesábamos. Probá otra vez." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: "Error al crear el turno" }, { status: 500 });
   }
 

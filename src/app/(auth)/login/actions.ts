@@ -19,15 +19,17 @@ export async function loginAction(formData: FormData) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    // Don't reveal whether email or password is wrong
+    const code = (error as { code?: string }).code;
+    const msg = error.message?.toLowerCase() ?? "";
+    if (code === "email_not_confirmed" || msg.includes("not confirmed")) {
+      redirect("/verify?email=" + encodeURIComponent(email) + "&unconfirmed=1");
+    }
     return { error: "Email o contraseña incorrectos" };
   }
 
   if (data.user && !data.user.email_confirmed_at) {
     await supabase.auth.signOut();
-    return {
-      error: "Tenés que verificar tu email antes de ingresar. Revisá tu casilla.",
-    };
+    redirect("/verify?email=" + encodeURIComponent(email) + "&unconfirmed=1");
   }
 
   if (data.user) {

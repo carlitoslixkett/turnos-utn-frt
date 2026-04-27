@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { CalendarPlus, CheckCircle, Copy } from "lucide-react";
+import { CalendarPlus, CheckCircle, Copy, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -30,17 +30,25 @@ interface SacarTurnoClientProps {
 interface CreatedTurn {
   id: string;
   security_code: string;
-  preferred_date: string;
+  date: string;
   notes?: { name: string } | null;
+}
+
+interface Slot {
+  interval_id: string;
+  interval_name: string;
+  date: string;
 }
 
 export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
   const [selectedNote, setSelectedNote] = useState("");
-  const [preferredDate, setPreferredDate] = useState("");
+  const [selectedDay, setSelectedDay] = useState("");
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [pickedSlot, setPickedSlot] = useState<Slot | null>(null);
   const [loading, setLoading] = useState(false);
   const [created, setCreated] = useState<CreatedTurn | null>(null);
 
-  // Only show notes that have at least one active interval
   const availableNoteIds = useMemo(() => {
     const ids = new Set<string>();
     intervals.forEach((i) => i.interval_notes.forEach((n) => ids.add(n.note_id)));
@@ -49,7 +57,6 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
 
   const availableNotes = notes.filter((n) => availableNoteIds.has(n.id));
 
-  // Date bounds for selected note
   const noteIntervals = useMemo(
     () => intervals.filter((i) => i.interval_notes.some((n) => n.note_id === selectedNote)),
     [intervals, selectedNote]
@@ -72,9 +79,38 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
     );
   }, [noteIntervals]);
 
+  const requestIdRef = useRef(0);
+
+  async function fetchSlots(noteId: string, day: string) {
+    if (!noteId || !day) {
+      setSlots([]);
+      setPickedSlot(null);
+      setSlotsLoading(false);
+      return;
+    }
+    const reqId = ++requestIdRef.current;
+    setSlotsLoading(true);
+    setPickedSlot(null);
+    try {
+      const res = await fetch(`/api/turns/slots?note_id=${noteId}&date=${day}`);
+      const json = await res.json();
+      if (reqId !== requestIdRef.current) return;
+      if (!Array.isArray(json.data)) {
+        toast.error(json.error ?? "Error obteniendo horarios");
+        setSlots([]);
+        return;
+      }
+      setSlots(json.data);
+    } catch {
+      if (reqId === requestIdRef.current) setSlots([]);
+    } finally {
+      if (reqId === requestIdRef.current) setSlotsLoading(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedNote || !preferredDate) return;
+    if (!selectedNote || !pickedSlot) return;
     setLoading(true);
     try {
       const res = await fetch("/api/turns", {
@@ -82,12 +118,22 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           note_id: selectedNote,
-          preferred_date: new Date(preferredDate).toISOString(),
+          selected_date: pickedSlot.date,
+          selected_interval_id: pickedSlot.interval_id,
         }),
       });
       const json = await res.json();
       if (!res.ok) {
         toast.error(json.error);
+        // refresh slots — someone else may have taken it
+        if (selectedDay) {
+          const refreshed = await fetch(
+            `/api/turns/slots?note_id=${selectedNote}&date=${selectedDay}`
+          );
+          const refreshedJson = await refreshed.json();
+          if (Array.isArray(refreshedJson.data)) setSlots(refreshedJson.data);
+          setPickedSlot(null);
+        }
         return;
       }
       setCreated(json.data);
@@ -102,6 +148,14 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
     toast.success("Código copiado");
   }
 
+  function reset() {
+    setCreated(null);
+    setSelectedNote("");
+    setSelectedDay("");
+    setSlots([]);
+    setPickedSlot(null);
+  }
+
   if (created) {
     return (
       <div className="mx-auto max-w-md space-y-6 pt-4">
@@ -111,7 +165,7 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
           <p className="text-muted-foreground text-sm">
             Tu turno fue asignado para el{" "}
             <strong>
-              {new Date(created.preferred_date).toLocaleString("es-AR", {
+              {new Date(created.date).toLocaleString("es-AR", {
                 dateStyle: "long",
                 timeStyle: "short",
               })}
@@ -138,14 +192,7 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
           </p>
         </div>
 
-        <Button
-          className="w-full"
-          onClick={() => {
-            setCreated(null);
-            setSelectedNote("");
-            setPreferredDate("");
-          }}
-        >
+        <Button className="w-full" onClick={reset}>
           Sacar otro turno
         </Button>
       </div>
@@ -156,7 +203,9 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
     <div className="mx-auto max-w-md space-y-6 pt-4">
       <div>
         <h1 className="text-2xl font-bold">Sacar turno</h1>
-        <p className="text-muted-foreground text-sm">Seleccioná el trámite y la fecha preferida</p>
+        <p className="text-muted-foreground text-sm">
+          Elegí el trámite, el día y un horario disponible
+        </p>
       </div>
 
       {availableNotes.length === 0 ? (
@@ -177,7 +226,9 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
                   type="button"
                   onClick={() => {
                     setSelectedNote(note.id);
-                    setPreferredDate("");
+                    setSelectedDay("");
+                    setSlots([]);
+                    setPickedSlot(null);
                   }}
                   className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
                     selectedNote === note.id
@@ -196,25 +247,66 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
 
           {selectedNote && (
             <div className="space-y-1">
-              <Label htmlFor="preferred-date">Fecha preferida</Label>
+              <Label htmlFor="day">Día</Label>
               <Input
-                id="preferred-date"
-                type="datetime-local"
-                value={preferredDate}
-                min={minDate ? `${minDate}T00:00` : undefined}
-                max={maxDate ? `${maxDate}T23:59` : undefined}
-                onChange={(e) => setPreferredDate(e.target.value)}
+                id="day"
+                type="date"
+                value={selectedDay}
+                min={minDate || undefined}
+                max={maxDate || undefined}
+                onChange={(e) => {
+                  const day = e.target.value;
+                  setSelectedDay(day);
+                  fetchSlots(selectedNote, day);
+                }}
                 required
               />
-              <p className="text-muted-foreground text-xs">
-                El sistema asignará el primer turno disponible a partir de esa fecha y hora.
-              </p>
+            </div>
+          )}
+
+          {selectedNote && selectedDay && (
+            <div className="space-y-2">
+              <Label>Horarios disponibles</Label>
+              {slotsLoading ? (
+                <div className="text-muted-foreground flex items-center justify-center gap-2 rounded-lg border border-dashed py-6 text-xs">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Buscando horarios...
+                </div>
+              ) : slots.length === 0 ? (
+                <p className="text-muted-foreground rounded-lg border border-dashed py-6 text-center text-xs">
+                  No hay horarios disponibles para esta fecha. Probá con otro día.
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {slots.map((s) => {
+                    const time = new Date(s.date).toLocaleTimeString("es-AR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    });
+                    const active = pickedSlot?.date === s.date;
+                    return (
+                      <button
+                        key={`${s.interval_id}-${s.date}`}
+                        type="button"
+                        onClick={() => setPickedSlot(s)}
+                        className={`rounded-lg border px-2 py-2 text-sm font-medium transition-colors ${
+                          active
+                            ? "border-[#E94A1F] bg-[#E94A1F] text-white"
+                            : "border-border hover:border-[#E94A1F]/60"
+                        }`}
+                      >
+                        {time}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
           <Button
             type="submit"
-            disabled={!selectedNote || !preferredDate || loading}
+            disabled={!selectedNote || !pickedSlot || loading}
             className="w-full"
           >
             {loading ? "Procesando..." : "Confirmar turno"}
