@@ -400,6 +400,54 @@ export type Database = {
           },
         ];
       };
+      turn_documents: {
+        Row: {
+          id: string;
+          turn_id: string;
+          storage_path: string;
+          file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          uploaded_by: string;
+          uploaded_at: string;
+        };
+        Insert: {
+          id?: string;
+          turn_id: string;
+          storage_path: string;
+          file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          uploaded_by: string;
+          uploaded_at?: string;
+        };
+        Update: {
+          id?: string;
+          turn_id?: string;
+          storage_path?: string;
+          file_name?: string;
+          mime_type?: string;
+          size_bytes?: number;
+          uploaded_by?: string;
+          uploaded_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "turn_documents_turn_id_fkey";
+            columns: ["turn_id"];
+            isOneToOne: false;
+            referencedRelation: "turns";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "turn_documents_uploaded_by_fkey";
+            columns: ["uploaded_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       worker_roles: {
         Row: {
           created_at: string;

@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { ArrowLeft } from "lucide-react";
 import { TurnDetailClient } from "./turn-detail-client";
+import { TurnDocuments } from "@/components/turn/turn-documents";
 
 const STATUS_CONFIG = {
   pending: { label: "Pendiente", color: "bg-yellow-100 text-yellow-800" },
@@ -73,6 +74,10 @@ export default async function TurnDetailPage({ params }: { params: Promise<{ id:
           {noteData?.description && (
             <p className="text-muted-foreground border-t pt-2 text-xs">{noteData.description}</p>
           )}
+        </div>
+
+        <div className="border-t pt-3">
+          <TurnDocuments turnId={turn.id} readOnly={turn.status !== "pending"} />
         </div>
 
         <div className="border-t pt-3">

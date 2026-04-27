@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { CalendarPlus, CheckCircle, Copy, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { TurnDocuments } from "@/components/turn/turn-documents";
 
 interface NoteOption {
   id: string;
@@ -192,9 +194,27 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
           </p>
         </div>
 
-        <Button className="w-full" onClick={reset}>
-          Sacar otro turno
-        </Button>
+        <div className="space-y-2 rounded-xl border bg-white p-4">
+          <p className="text-sm font-medium">¿Querés adjuntar tus papeles ahora?</p>
+          <p className="text-muted-foreground text-xs">
+            Subí imágenes (JPG/PNG) o PDFs de la documentación requerida. El empleado los va a ver
+            al atenderte y no te van a pedir el papel físico.
+          </p>
+          <TurnDocuments turnId={created.id} />
+        </div>
+
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={reset}>
+            Sacar otro turno
+          </Button>
+          <Button
+            render={<Link href={`/mis-turnos/${created.id}`} />}
+            nativeButton={false}
+            className="flex-1"
+          >
+            Ver detalle
+          </Button>
+        </div>
       </div>
     );
   }
