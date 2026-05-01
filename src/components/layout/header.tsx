@@ -13,6 +13,7 @@ import type { Profile } from "@/types";
 import { LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { UtnBrand } from "@/components/brand/utn-brand";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
 
 interface HeaderProps {
   profile: Profile;
@@ -33,30 +34,33 @@ export function Header({ profile }: HeaderProps) {
         Gestión de Turnos — Departamento de Alumnos
       </span>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          className="flex items-center gap-2 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E94A1F]"
-          aria-label="Menú de usuario"
-        >
-          <Avatar className="h-8 w-8 bg-[#E94A1F] text-white">
-            <AvatarFallback className="bg-[#E94A1F] text-xs font-bold text-white">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <span className="hidden text-sm font-medium lg:block">{profile.full_name}</span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem render={<Link href="/perfil" />}>
-            <User className="h-4 w-4" />
-            Mi perfil
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={() => logoutAction()}>
-            <LogOut className="h-4 w-4" />
-            Cerrar sesión
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center gap-2">
+        <NotificationsBell />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="flex items-center gap-2 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E94A1F]"
+            aria-label="Menú de usuario"
+          >
+            <Avatar className="h-8 w-8 bg-[#E94A1F] text-white">
+              <AvatarFallback className="bg-[#E94A1F] text-xs font-bold text-white">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <span className="hidden text-sm font-medium lg:block">{profile.full_name}</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem render={<Link href="/perfil" />}>
+              <User className="h-4 w-4" />
+              Mi perfil
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => logoutAction()}>
+              <LogOut className="h-4 w-4" />
+              Cerrar sesión
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </header>
   );
 }

@@ -4,6 +4,7 @@ import { createClosureSchema } from "@/lib/validations/closures";
 import { writeAuditLog } from "@/lib/utils/audit";
 import { sendEmail } from "@/lib/email/send";
 import { turnCancelledByClosureEmail } from "@/lib/email/templates";
+import { createNotification } from "@/lib/utils/notifications";
 import { dateOnlyToOfficeStart, dateOnlyToOfficeEnd } from "@/lib/utils/office-settings";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -163,13 +164,27 @@ export async function POST(request: NextRequest) {
       });
 
       const profileData = t.profile as { full_name: string } | null;
+      const turnDateStr = format(new Date(t.date as string), "EEEE d 'de' MMMM, HH:mm", {
+        locale: es,
+      });
+
+      // In-app notification (works always, no setup needed)
+      await createNotification({
+        userId: t.student_id as string,
+        type: "turn_cancelled_by_closure",
+        title: "Tu turno fue cancelado",
+        body: `Tu turno del ${turnDateStr} fue cancelado porque la oficina no atenderá. Motivo: ${created.reason}`,
+        link: "/mis-turnos",
+      });
+
+      // Email (best-effort — only delivers if Resend is configured for the recipient)
       const { data: studentAuth } = await adminClient.auth.admin.getUserById(
         t.student_id as string
       );
       if (studentAuth?.user?.email) {
         const tpl = turnCancelledByClosureEmail({
           fullName: profileData?.full_name ?? "Estudiante",
-          turnDate: format(new Date(t.date as string), "EEEE d 'de' MMMM, HH:mm", { locale: es }),
+          turnDate: turnDateStr,
           reason: created.reason,
         });
         await sendEmail({ to: studentAuth.user.email, subject: tpl.subject, html: tpl.html });

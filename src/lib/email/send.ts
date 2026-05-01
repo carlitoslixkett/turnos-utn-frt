@@ -24,12 +24,19 @@ export async function sendEmail({
   try {
     const { error } = await resend.emails.send({ from: fromEmail, to, subject, html });
     if (error) {
-      console.error("[email] send failed", error);
+      // Common cause: domain not verified or recipient not allowed by Resend free tier.
+      // We don't surface this to the user — the in-app notification covers it.
+      console.warn("[email] send failed (non-fatal, in-app notif still delivered)", {
+        to,
+        subject,
+        from: fromEmail,
+        error: error.message,
+      });
       return { ok: false, error: error.message };
     }
     return { ok: true };
   } catch (err) {
-    console.error("[email] exception", err);
+    console.warn("[email] exception (non-fatal)", err);
     return { ok: false, error: err instanceof Error ? err.message : "unknown" };
   }
 }

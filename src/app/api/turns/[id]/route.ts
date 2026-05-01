@@ -4,6 +4,7 @@ import { cancelTurnSchema, workerCancelTurnSchema } from "@/lib/validations/turn
 import { writeAuditLog } from "@/lib/utils/audit";
 import { sendEmail } from "@/lib/email/send";
 import { cancelLockoutEmail, turnCancelledByWorkerEmail } from "@/lib/email/templates";
+import { createNotification } from "@/lib/utils/notifications";
 import bcrypt from "bcryptjs";
 import { differenceInDays, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -88,7 +89,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         payload: { reason },
       });
 
-      // Notify the student
+      // Notify the student (in-app + email best-effort)
+      const turnDateStr = format(new Date(turn.date), "EEEE d 'de' MMMM, HH:mm", { locale: es });
+
+      await createNotification({
+        userId: turn.student_id,
+        type: "turn_cancelled_by_worker",
+        title: "Tu turno fue cancelado",
+        body: `El Departamento de Alumnos canceló tu turno del ${turnDateStr}. Motivo: ${reason}`,
+        link: "/mis-turnos",
+      });
+
       const { data: studentProfile } = await adminClient
         .from("profiles")
         .select("full_name")
@@ -98,7 +109,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (studentAuth?.user?.email) {
         const tpl = turnCancelledByWorkerEmail({
           fullName: studentProfile?.full_name ?? "Estudiante",
-          turnDate: format(new Date(turn.date), "EEEE d 'de' MMMM, HH:mm", { locale: es }),
+          turnDate: turnDateStr,
           reason,
         });
         await sendEmail({ to: studentAuth.user.email, subject: tpl.subject, html: tpl.html });
