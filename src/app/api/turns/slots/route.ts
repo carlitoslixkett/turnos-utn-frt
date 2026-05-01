@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { generateSlots } from "@/lib/utils/interval-slots";
 import { getOfficeSettings } from "@/lib/utils/office-settings";
+import { fetchClosuresInRange } from "@/lib/utils/closures";
 
 // GET /api/turns/slots?note_id=...&date=YYYY-MM-DD
 // Returns globally available slots for a given trámite on a given calendar day.
@@ -39,12 +40,27 @@ export async function GET(request: NextRequest) {
   if (intervalsError) {
     return NextResponse.json({ error: intervalsError.message }, { status: 500 });
   }
+  // Office closures (paros, feriados, eventos) for this day
+  const closures = await fetchClosuresInRange(date, date);
+  const fullDayClosure = closures.find((c) => c.all_day) ?? null;
+  const closureInfo = fullDayClosure
+    ? { all_day: true as const, reason: fullDayClosure.reason }
+    : closures.length > 0
+      ? {
+          all_day: false as const,
+          reason: closures[0].reason,
+          start_time: closures[0].start_time?.slice(0, 5) ?? null,
+          end_time: closures[0].end_time?.slice(0, 5) ?? null,
+        }
+      : null;
+
   if (!intervals || intervals.length === 0) {
-    return NextResponse.json({ data: [] });
+    return NextResponse.json({ data: [], closure: closureInfo });
   }
 
   const settings = await getOfficeSettings();
-  if (settings.attention_windows.length === 0) return NextResponse.json({ data: [] });
+  if (settings.attention_windows.length === 0)
+    return NextResponse.json({ data: [], closure: closureInfo });
 
   // Globally taken active turns on this calendar day (any interval, any note)
   const { data: takenTurns } = await admin
@@ -70,7 +86,8 @@ export async function GET(request: NextRequest) {
       lo,
       hi,
       settings.turn_duration_minutes,
-      settings.attention_windows
+      settings.attention_windows,
+      closures
     );
     for (const slot of generated) {
       if (slot < now) continue;
@@ -86,5 +103,5 @@ export async function GET(request: NextRequest) {
   }
 
   const result = Array.from(slotMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  return NextResponse.json({ data: result });
+  return NextResponse.json({ data: result, closure: closureInfo });
 }

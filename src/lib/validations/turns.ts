@@ -21,5 +21,13 @@ export const cancelTurnSchema = z.object({
     .max(6, "El código de seguridad debe tener 6 caracteres"),
 });
 
+export const workerCancelTurnSchema = z.object({
+  reason: z
+    .string()
+    .min(3, "El motivo debe tener al menos 3 caracteres")
+    .max(300, "El motivo no puede exceder los 300 caracteres"),
+});
+
 export type CreateTurnInput = z.infer<typeof createTurnSchema>;
 export type CancelTurnInput = z.infer<typeof cancelTurnSchema>;
+export type WorkerCancelTurnInput = z.infer<typeof workerCancelTurnSchema>;

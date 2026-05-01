@@ -8,7 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, XCircle, Clock, User } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, User, Ban } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -39,6 +41,38 @@ export function AttendTurnsClient({ initialTurns, selectedDay, today }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const supabase = createClient();
   const isToday = selectedDay === today;
+
+  // Cancel-with-reason dialog state
+  const [cancelTarget, setCancelTarget] = useState<TurnWithRelations | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    if (cancelReason.trim().length < 3) {
+      toast.error("Indicá un motivo (mínimo 3 caracteres)");
+      return;
+    }
+    setCancelLoading(true);
+    try {
+      const res = await fetch(`/api/turns/${cancelTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel", reason: cancelReason.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Error al cancelar");
+      } else {
+        toast.success("Turno cancelado y estudiante notificado");
+        setCancelTarget(null);
+        setCancelReason("");
+        router.refresh();
+      }
+    } finally {
+      setCancelLoading(false);
+    }
+  }
 
   // Real-time updates only matter when looking at today
   useEffect(() => {
@@ -193,6 +227,16 @@ export function AttendTurnsClient({ initialTurns, selectedDay, today }: Props) {
                 Ausente (F12)
               </Button>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCancelTarget(nextTurn)}
+              disabled={!!loading}
+              className="w-full text-red-600 hover:bg-red-50"
+            >
+              <Ban className="mr-2 h-4 w-4" />
+              Cancelar turno (con motivo)
+            </Button>
           </CardContent>
         </Card>
       ) : turns.length === 0 ? (
@@ -218,8 +262,9 @@ export function AttendTurnsClient({ initialTurns, selectedDay, today }: Props) {
                 key={turn.id}
                 turn={turn}
                 onAction={handleAction}
+                onCancel={() => setCancelTarget(turn)}
                 disabled={!!loading}
-                actionable={isToday}
+                actionable
               />
             ))}
           </div>
@@ -236,6 +281,7 @@ export function AttendTurnsClient({ initialTurns, selectedDay, today }: Props) {
                 key={turn.id}
                 turn={turn}
                 onAction={handleAction}
+                onCancel={() => {}}
                 disabled
                 actionable={false}
               />
@@ -243,6 +289,61 @@ export function AttendTurnsClient({ initialTurns, selectedDay, today }: Props) {
           </div>
         </section>
       )}
+
+      {/* Manual cancel dialog */}
+      <Dialog
+        open={!!cancelTarget}
+        onOpenChange={(v) => {
+          if (!v) {
+            setCancelTarget(null);
+            setCancelReason("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancelar turno</DialogTitle>
+          </DialogHeader>
+          {cancelTarget && (
+            <div className="space-y-3 text-sm">
+              <p>
+                Vas a cancelar el turno de{" "}
+                <strong>{cancelTarget.profile?.full_name ?? "el estudiante"}</strong> (
+                {format(new Date(cancelTarget.date), "EEEE d 'de' MMMM, HH:mm", { locale: es })}).
+              </p>
+              <div className="space-y-1">
+                <Label htmlFor="cancel-reason">Motivo (lo recibirá el estudiante por email)</Label>
+                <Textarea
+                  id="cancel-reason"
+                  rows={3}
+                  placeholder="Ej: La empleada que atiende este trámite no estará disponible..."
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCancelTarget(null);
+                setCancelReason("");
+              }}
+              disabled={cancelLoading}
+            >
+              Volver
+            </Button>
+            <Button
+              onClick={confirmCancel}
+              disabled={cancelLoading}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {cancelLoading ? "Cancelando..." : "Confirmar cancelación"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -250,15 +351,19 @@ export function AttendTurnsClient({ initialTurns, selectedDay, today }: Props) {
 function TurnRow({
   turn,
   onAction,
+  onCancel,
   disabled,
   actionable,
 }: {
   turn: TurnWithRelations;
   onAction: (id: string, a: "attend" | "lost") => void;
+  onCancel: () => void;
   disabled: boolean;
   actionable: boolean;
 }) {
   const cfg = STATUS_CFG[turn.status as string] ?? STATUS_CFG.pending;
+  const cancelReason = (turn as TurnWithRelations & { cancel_reason?: string | null })
+    .cancel_reason;
   return (
     <Card className="rounded-xl">
       <CardContent className="px-4 py-3">
@@ -283,6 +388,7 @@ function TurnRow({
                   onClick={() => onAction(turn.id, "attend")}
                   disabled={disabled}
                   className="rounded-xl bg-green-600 text-white hover:bg-green-700"
+                  aria-label="Atendido"
                 >
                   <CheckCircle2 className="h-4 w-4" />
                 </Button>
@@ -291,13 +397,28 @@ function TurnRow({
                   onClick={() => onAction(turn.id, "lost")}
                   disabled={disabled}
                   className="rounded-xl bg-red-600 text-white hover:bg-red-700"
+                  aria-label="Ausente"
                 >
                   <XCircle className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={onCancel}
+                  disabled={disabled}
+                  className="rounded-xl text-red-600 hover:bg-red-50"
+                  aria-label="Cancelar con motivo"
+                  title="Cancelar turno"
+                >
+                  <Ban className="h-4 w-4" />
                 </Button>
               </>
             )}
           </div>
         </div>
+        {turn.status === "cancelled" && cancelReason && (
+          <p className="text-muted-foreground mt-2 text-xs italic">Motivo: {cancelReason}</p>
+        )}
         <div className="mt-2">
           <TurnDocuments turnId={turn.id} readOnly hideIfEmpty />
         </div>

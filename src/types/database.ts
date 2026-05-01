@@ -282,6 +282,7 @@ export type Database = {
           attended_at: string | null;
           cancel_attempts: number;
           cancel_blocked_until: string | null;
+          cancel_reason: string | null;
           created_at: string;
           date: string;
           id: string;
@@ -296,6 +297,7 @@ export type Database = {
           attended_at?: string | null;
           cancel_attempts?: number;
           cancel_blocked_until?: string | null;
+          cancel_reason?: string | null;
           created_at?: string;
           date: string;
           id?: string;
@@ -310,6 +312,7 @@ export type Database = {
           attended_at?: string | null;
           cancel_attempts?: number;
           cancel_blocked_until?: string | null;
+          cancel_reason?: string | null;
           created_at?: string;
           date?: string;
           id?: string;
@@ -394,6 +397,50 @@ export type Database = {
           {
             foreignKeyName: "office_settings_updated_by_fkey";
             columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      office_closures: {
+        Row: {
+          id: string;
+          date_start: string;
+          date_end: string;
+          all_day: boolean;
+          start_time: string | null;
+          end_time: string | null;
+          reason: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          date_start: string;
+          date_end: string;
+          all_day?: boolean;
+          start_time?: string | null;
+          end_time?: string | null;
+          reason: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          date_start?: string;
+          date_end?: string;
+          all_day?: boolean;
+          start_time?: string | null;
+          end_time?: string | null;
+          reason?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "office_closures_created_by_fkey";
+            columns: ["created_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
             referencedColumns: ["id"];

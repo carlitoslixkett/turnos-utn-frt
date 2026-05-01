@@ -61,6 +61,46 @@ export function intervalDeactivatedEmail(params: {
   };
 }
 
+export function turnCancelledByClosureEmail(params: {
+  fullName: string;
+  turnDate: string;
+  reason: string;
+}): { subject: string; html: string } {
+  const body = `
+    <p>Hola <strong>${escape(params.fullName)}</strong>,</p>
+    <p>Te informamos que tu turno del <strong>${escape(params.turnDate)}</strong> fue
+    <strong>cancelado</strong> porque la oficina no atenderá ese día.</p>
+    <p style="padding:12px 14px;background:#fff7ed;border-left:3px solid ${BRAND_COLOR};border-radius:6px;">
+      <strong>Motivo:</strong> ${escape(params.reason)}
+    </p>
+    <p>Lamentamos las molestias. Podés sacar un nuevo turno desde el sistema cuando quieras.</p>
+  `;
+  return {
+    subject: "Tu turno fue cancelado — la oficina no atiende ese día",
+    html: layout("Cancelación por cierre de oficina", body),
+  };
+}
+
+export function turnCancelledByWorkerEmail(params: {
+  fullName: string;
+  turnDate: string;
+  reason: string;
+}): { subject: string; html: string } {
+  const body = `
+    <p>Hola <strong>${escape(params.fullName)}</strong>,</p>
+    <p>Tu turno del <strong>${escape(params.turnDate)}</strong> fue <strong>cancelado</strong>
+    por el personal del Departamento de Alumnos.</p>
+    <p style="padding:12px 14px;background:#fff7ed;border-left:3px solid ${BRAND_COLOR};border-radius:6px;">
+      <strong>Motivo:</strong> ${escape(params.reason)}
+    </p>
+    <p>Si necesitás atención, podés sacar un nuevo turno desde el sistema.</p>
+  `;
+  return {
+    subject: "Tu turno fue cancelado",
+    html: layout("Turno cancelado", body),
+  };
+}
+
 export function welcomeEmail(params: { fullName: string }): { subject: string; html: string } {
   const body = `
     <p>Hola <strong>${escape(params.fullName)}</strong>,</p>

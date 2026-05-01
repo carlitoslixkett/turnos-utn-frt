@@ -12,6 +12,7 @@ import type { Turn } from "@/types";
 
 interface TurnWithNote extends Turn {
   notes: { id: string; name: string } | null;
+  cancel_reason: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -109,6 +110,16 @@ export function MisTurnosClient({ initialTurns }: MisTurnosClientProps) {
                   )}
                 </div>
               </div>
+              {turn.status === "cancelled" && turn.cancel_reason && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm">
+                  <p className="font-medium text-red-900">
+                    Tu turno fue cancelado por el Departamento de Alumnos.
+                  </p>
+                  <p className="mt-0.5 text-red-800">
+                    <span className="font-medium">Motivo:</span> {turn.cancel_reason}
+                  </p>
+                </div>
+              )}
             </div>
           ))}
         </div>

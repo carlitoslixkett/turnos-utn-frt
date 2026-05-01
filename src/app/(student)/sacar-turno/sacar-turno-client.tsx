@@ -42,10 +42,18 @@ interface Slot {
   date: string;
 }
 
+interface ClosureInfo {
+  all_day: boolean;
+  reason: string;
+  start_time?: string | null;
+  end_time?: string | null;
+}
+
 export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
   const [selectedNote, setSelectedNote] = useState("");
   const [selectedDay, setSelectedDay] = useState("");
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [closure, setClosure] = useState<ClosureInfo | null>(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [pickedSlot, setPickedSlot] = useState<Slot | null>(null);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -90,6 +98,7 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
   async function fetchSlots(noteId: string, day: string) {
     if (!noteId || !day) {
       setSlots([]);
+      setClosure(null);
       setPickedSlot(null);
       setSlotsLoading(false);
       return;
@@ -104,11 +113,16 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
       if (!Array.isArray(json.data)) {
         toast.error(json.error ?? "Error obteniendo horarios");
         setSlots([]);
+        setClosure(null);
         return;
       }
       setSlots(json.data);
+      setClosure(json.closure ?? null);
     } catch {
-      if (reqId === requestIdRef.current) setSlots([]);
+      if (reqId === requestIdRef.current) {
+        setSlots([]);
+        setClosure(null);
+      }
     } finally {
       if (reqId === requestIdRef.current) setSlotsLoading(false);
     }
@@ -306,16 +320,32 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
           {selectedNote && selectedDay && (
             <div className="space-y-2">
               <Label>Horarios disponibles</Label>
+              {closure?.all_day && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm">
+                  <p className="font-medium text-red-900">La oficina no atiende este día.</p>
+                  <p className="mt-0.5 text-red-800">
+                    <span className="font-medium">Motivo:</span> {closure.reason}
+                  </p>
+                </div>
+              )}
+              {closure && !closure.all_day && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
+                  <p className="font-medium text-amber-900">
+                    Cierre parcial este día ({closure.start_time}–{closure.end_time}).
+                  </p>
+                  <p className="text-amber-800">{closure.reason}</p>
+                </div>
+              )}
               {slotsLoading ? (
                 <div className="text-muted-foreground flex items-center justify-center gap-2 rounded-lg border border-dashed py-6 text-xs">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Buscando horarios...
                 </div>
-              ) : slots.length === 0 ? (
+              ) : slots.length === 0 && !closure?.all_day ? (
                 <p className="text-muted-foreground rounded-lg border border-dashed py-6 text-center text-xs">
                   No hay horarios disponibles para esta fecha. Probá con otro día.
                 </p>
-              ) : (
+              ) : slots.length > 0 ? (
                 <div className="grid grid-cols-3 gap-2">
                   {slots.map((s) => {
                     const time = new Date(s.date).toLocaleTimeString("es-AR", {
@@ -339,7 +369,7 @@ export function SacarTurnoClient({ notes, intervals }: SacarTurnoClientProps) {
                     );
                   })}
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 

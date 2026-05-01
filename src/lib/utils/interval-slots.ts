@@ -108,11 +108,41 @@ function timeToMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
+// Lightweight closure shape (kept here to avoid a circular import with closures.ts)
+export interface ClosureLike {
+  date_start: string;
+  date_end: string;
+  all_day: boolean;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+function isSlotClosed(slot: Date, closures: ClosureLike[]): boolean {
+  if (!closures.length) return false;
+  const ymd = slot.toLocaleDateString("en-CA", { timeZone: OFFICE_TZ });
+  const hm = new Intl.DateTimeFormat("en-GB", {
+    timeZone: OFFICE_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(slot);
+  for (const c of closures) {
+    if (ymd < c.date_start || ymd > c.date_end) continue;
+    if (c.all_day) return true;
+    if (!c.start_time || !c.end_time) continue;
+    const s = c.start_time.slice(0, 5);
+    const e = c.end_time.slice(0, 5);
+    if (hm >= s && hm < e) return true;
+  }
+  return false;
+}
+
 export function generateSlots(
   dateStart: Date,
   dateEnd: Date,
   durationMinutes: number,
-  windows: AttentionWindow[]
+  windows: AttentionWindow[],
+  closures: ClosureLike[] = []
 ): Date[] {
   if (windows.length === 0 || durationMinutes <= 0) return [];
 
@@ -127,7 +157,9 @@ export function generateSlots(
         const h = String(Math.floor(m / 60)).padStart(2, "0");
         const mm = String(m % 60).padStart(2, "0");
         const slot = zonedDateTime(day, `${h}:${mm}`);
-        if (slot >= dateStart && slot <= dateEnd) slots.push(slot);
+        if (slot < dateStart || slot > dateEnd) continue;
+        if (closures.length && isSlotClosed(slot, closures)) continue;
+        slots.push(slot);
       }
     }
   }
@@ -138,7 +170,8 @@ export function countSlots(
   dateStart: Date,
   dateEnd: Date,
   durationMinutes: number,
-  windows: AttentionWindow[]
+  windows: AttentionWindow[],
+  closures: ClosureLike[] = []
 ): number {
-  return generateSlots(dateStart, dateEnd, durationMinutes, windows).length;
+  return generateSlots(dateStart, dateEnd, durationMinutes, windows, closures).length;
 }

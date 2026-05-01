@@ -6,6 +6,8 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { generateSlots } from "@/lib/utils/interval-slots";
 import { getOfficeSettings } from "@/lib/utils/office-settings";
+import { fetchClosuresInRange, slotIsClosed } from "@/lib/utils/closures";
+import { OFFICE_TZ } from "@/lib/utils/interval-slots";
 
 // GET /api/turns — list turns (student sees own, worker sees all)
 export async function GET(request: NextRequest) {
@@ -99,6 +101,16 @@ export async function POST(request: NextRequest) {
     const slotDate = new Date(selected_date);
     const settings = await getOfficeSettings();
 
+    // Reject if this exact slot falls within an office closure
+    const slotYmd = slotDate.toLocaleDateString("en-CA", { timeZone: OFFICE_TZ });
+    const closuresForSlot = await fetchClosuresInRange(slotYmd, slotYmd);
+    if (slotIsClosed(slotDate, closuresForSlot)) {
+      return NextResponse.json(
+        { error: "La oficina no atiende en ese horario (cierre programado)" },
+        { status: 409 }
+      );
+    }
+
     let intervalQuery = adminClient
       .from("intervals")
       .select("id, name, date_start, date_end, interval_notes!inner(note_id)")
@@ -118,7 +130,8 @@ export async function POST(request: NextRequest) {
         dayStart,
         dayEnd,
         settings.turn_duration_minutes,
-        settings.attention_windows
+        settings.attention_windows,
+        closuresForSlot
       );
       return slots.some((s) => s.getTime() === slotDate.getTime());
     });
@@ -213,6 +226,18 @@ export async function POST(request: NextRequest) {
 
   const settings = await getOfficeSettings();
 
+  // Closures spanning all candidate intervals' date ranges
+  const overallStart = intervals
+    .map((i) => i.date_start as string)
+    .sort()[0]
+    .slice(0, 10);
+  const overallEnd = intervals
+    .map((i) => i.date_end as string)
+    .sort()
+    .slice(-1)[0]
+    .slice(0, 10);
+  const closuresAll = await fetchClosuresInRange(overallStart, overallEnd);
+
   // Globally taken slots (any interval, any note)
   const { data: existingTurns } = await adminClient
     .from("turns")
@@ -236,7 +261,8 @@ export async function POST(request: NextRequest) {
       dateStart,
       dateEnd,
       settings.turn_duration_minutes,
-      settings.attention_windows
+      settings.attention_windows,
+      closuresAll
     );
     const totalSlots = allSlots.length;
 

@@ -12,6 +12,7 @@ import {
   XCircle,
   ArrowRight,
   CalendarPlus,
+  CalendarOff,
   LayoutDashboard,
   Users,
   BarChart3,
@@ -123,6 +124,20 @@ export default async function WorkerDashboardPage() {
       .gte("date", endIso),
   ]);
 
+  // Closures for "today" and the next 30 days
+  const in30 = new Date();
+  in30.setDate(in30.getDate() + 30);
+  const in30Ymd = in30.toLocaleDateString("en-CA", { timeZone: TZ });
+  const { data: upcomingClosures } = await admin
+    .from("office_closures")
+    .select("id, date_start, date_end, all_day, start_time, end_time, reason")
+    .gte("date_end", today)
+    .lte("date_start", in30Ymd)
+    .order("date_start", { ascending: true })
+    .limit(5);
+  const todaysClosure =
+    (upcomingClosures ?? []).find((c) => today >= c.date_start && today <= c.date_end) ?? null;
+
   const firstName = profile?.full_name?.split(" ")[0] ?? "";
   const windows = parseWindows(settings?.attention_windows);
   const duration = settings?.turn_duration_minutes ?? 15;
@@ -179,6 +194,30 @@ export default async function WorkerDashboardPage() {
             variant="outline"
           >
             Configurar
+          </Button>
+        </div>
+      )}
+
+      {todaysClosure && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+          <CalendarOff className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+          <div className="flex-1">
+            <p className="font-medium text-red-900">
+              {todaysClosure.all_day
+                ? "Hoy la oficina no atiende"
+                : `Cierre parcial hoy (${todaysClosure.start_time?.slice(0, 5)}–${todaysClosure.end_time?.slice(0, 5)})`}
+            </p>
+            <p className="text-sm text-red-800">
+              <span className="font-medium">Motivo:</span> {todaysClosure.reason}
+            </p>
+          </div>
+          <Button
+            render={<Link href="/cierres" />}
+            nativeButton={false}
+            size="sm"
+            variant="outline"
+          >
+            Ver
           </Button>
         </div>
       )}
@@ -278,6 +317,49 @@ export default async function WorkerDashboardPage() {
         </Card>
       </section>
 
+      {/* Próximos cierres */}
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Próximos cierres / paros</h2>
+          <Link href="/cierres" className="text-xs font-medium text-[#E94A1F] hover:underline">
+            Gestionar
+          </Link>
+        </div>
+        {!upcomingClosures || upcomingClosures.length === 0 ? (
+          <Card className="rounded-2xl border-dashed">
+            <CardContent className="text-muted-foreground py-6 text-center text-sm">
+              No hay cierres programados.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {upcomingClosures.map((c) => (
+              <Card key={c.id} className="rounded-xl border-amber-200 bg-amber-50/40">
+                <CardContent className="px-4 py-3">
+                  <p className="text-sm font-medium capitalize">
+                    {c.date_start === c.date_end
+                      ? format(new Date(`${c.date_start}T12:00:00`), "EEEE d 'de' MMMM", {
+                          locale: es,
+                        })
+                      : `${format(new Date(`${c.date_start}T12:00:00`), "d MMM", {
+                          locale: es,
+                        })} → ${format(new Date(`${c.date_end}T12:00:00`), "d MMM", {
+                          locale: es,
+                        })}`}
+                    {!c.all_day && (
+                      <span className="text-muted-foreground ml-2 text-xs">
+                        {c.start_time?.slice(0, 5)}–{c.end_time?.slice(0, 5)}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-muted-foreground mt-0.5 truncate text-xs">{c.reason}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Quick links */}
       <section>
         <h2 className="mb-3 text-lg font-semibold">Accesos rápidos</h2>
@@ -293,6 +375,16 @@ export default async function WorkerDashboardPage() {
             icon={<Clock className="h-5 w-5" />}
             label="Horarios de Atención"
             sub={hasWindows ? "Configurado" : "Sin configurar"}
+          />
+          <QuickLink
+            href="/cierres"
+            icon={<CalendarOff className="h-5 w-5" />}
+            label="Cierres / Paros"
+            sub={
+              upcomingClosures && upcomingClosures.length > 0
+                ? `${upcomingClosures.length} próximo${upcomingClosures.length === 1 ? "" : "s"}`
+                : "Ninguno"
+            }
           />
           <QuickLink
             href="/gestionar-notas"

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { cancelTurnSchema } from "@/lib/validations/turns";
+import { cancelTurnSchema, workerCancelTurnSchema } from "@/lib/validations/turns";
 import { writeAuditLog } from "@/lib/utils/audit";
 import { sendEmail } from "@/lib/email/send";
-import { cancelLockoutEmail } from "@/lib/email/templates";
+import { cancelLockoutEmail, turnCancelledByWorkerEmail } from "@/lib/email/templates";
 import bcrypt from "bcryptjs";
-import { differenceInDays } from "date-fns";
+import { differenceInDays, format } from "date-fns";
+import { es } from "date-fns/locale";
 
 const CANCEL_BLOCK_MINUTES = 5;
 const MAX_CANCEL_ATTEMPTS = 3;
@@ -60,6 +61,50 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         entityId: id,
       });
       return NextResponse.json({ message: "Turno marcado como ausente" });
+    }
+    if (action === "cancel") {
+      if (turn.status !== "pending") {
+        return NextResponse.json(
+          { error: "Solo se pueden cancelar turnos pendientes" },
+          { status: 409 }
+        );
+      }
+      const parsed = workerCancelTurnSchema.safeParse({ reason: body.reason });
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+      }
+      const reason = parsed.data.reason.trim();
+
+      await adminClient
+        .from("turns")
+        .update({ status: "cancelled", cancel_reason: reason })
+        .eq("id", id);
+
+      await writeAuditLog({
+        actorId: user.id,
+        action: "turn.cancel_by_worker",
+        entityType: "turns",
+        entityId: id,
+        payload: { reason },
+      });
+
+      // Notify the student
+      const { data: studentProfile } = await adminClient
+        .from("profiles")
+        .select("full_name")
+        .eq("id", turn.student_id)
+        .single();
+      const { data: studentAuth } = await adminClient.auth.admin.getUserById(turn.student_id);
+      if (studentAuth?.user?.email) {
+        const tpl = turnCancelledByWorkerEmail({
+          fullName: studentProfile?.full_name ?? "Estudiante",
+          turnDate: format(new Date(turn.date), "EEEE d 'de' MMMM, HH:mm", { locale: es }),
+          reason,
+        });
+        await sendEmail({ to: studentAuth.user.email, subject: tpl.subject, html: tpl.html });
+      }
+
+      return NextResponse.json({ message: "Turno cancelado y estudiante notificado" });
     }
     return NextResponse.json({ error: "Acción no válida" }, { status: 400 });
   }
