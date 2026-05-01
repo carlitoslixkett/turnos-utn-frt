@@ -8,11 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { Turn } from "@/types";
 
-interface TurnWithNote extends Turn {
-  notes: { id: string; name: string } | null;
+interface TurnWithNote {
+  id: string;
+  status: "pending" | "attended" | "lost" | "cancelled";
+  date: string;
+  attended_at: string | null;
   cancel_reason: string | null;
+  created_at: string;
+  notes: { id: string; name: string } | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
